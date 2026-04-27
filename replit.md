@@ -43,4 +43,36 @@ License: MIT.
 - [ ] Step 7 — React frontend case room interface
 - [ ] Step 8 — Streaming polish + bundled sample dataset
 
+## Hackathon Timeline
+
+Deadline: ~49 days from April 27, 2026 (≈ June 15, 2026).
+Cadence: teaching-paced, 4–5 build days per week. Buffer of ~17–21 days built in.
+
+| Week | Dates (approx) | Focus |
+|------|----------------|-------|
+| 1 | Apr 27 – May 3 | Steps 2 & 3 — DB schema + OpenAPI spec/endpoints |
+| 2 | May 4 – May 10 | Step 4 part 1 — log parser, IOC extractor, timeline builder |
+| 3 | May 11 – May 17 | Step 4 part 2 + Step 5 — network/entropy/MCP tools, then integrity guard |
+| 4 | May 18 – May 24 | Step 6 — autonomous agent reasoning loop with SSE streaming |
+| 5 | May 25 – May 31 | Step 7 — React "case room" frontend + start rough demo takes |
+| 6 | Jun 1 – Jun 7 | Step 8 — sample dataset, accuracy run, polish |
+| 7 | Jun 8 – Jun 14 | Demo video, architecture diagram, written description, try-it-out instructions. **Code freeze 48h before deadline.** |
+
+### Discipline rules
+
+1. **No scope creep.** New ideas go in `ideas-for-v2.md`, not into the build plan.
+2. **Demo work starts Week 5**, not the last week. Polished demo = judging weight.
+3. **Code freeze 48h before submission.** Final 2 days are docs, video, and dry runs only.
+
+## Hackathon Deliverables Checklist
+
+- [x] (1) MIT-licensed code repo
+- [ ] (2) Demo video
+- [ ] (3) Architecture diagram
+- [ ] (4) Written description
+- [ ] (5) Dataset documentation
+- [ ] (6) Accuracy report
+- [ ] (7) Try-it-out instructions
+- [ ] (8) Structured execution logs (architectural — covered by Steps 2 & 6)
+
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
