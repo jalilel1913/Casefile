@@ -14,3 +14,5 @@ export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
+export * from "./integrity.js";
+export { applyIntegrityTriggers } from "./setup-triggers.js";

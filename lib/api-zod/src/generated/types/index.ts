@@ -15,6 +15,8 @@ export * from "./badRequestResponse";
 export * from "./case";
 export * from "./caseDetail";
 export * from "./caseStatus";
+export * from "./chainOfCustody";
+export * from "./chainOfCustodyEntry";
 export * from "./createArtifactRequest";
 export * from "./createCaseRequest";
 export * from "./errorDetail";

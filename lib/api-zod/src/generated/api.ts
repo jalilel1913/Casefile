@@ -337,6 +337,50 @@ export const ListStepLogsResponseItem = zod.object({
 export const ListStepLogsResponse = zod.array(ListStepLogsResponseItem);
 
 /**
+ * Returns every artifact-touching tool invocation for the case in
+chronological order, including the SHA-256 hash that was verified at
+read time. This is the auditable record that proves which evidence
+the agent looked at and that it was not tampered with.
+
+ * @summary Chain-of-custody report for a case
+ */
+export const GetCaseChainOfCustodyParams = zod.object({
+  caseId: zod.coerce.string().uuid(),
+});
+
+export const getCaseChainOfCustodyResponseArtifactCountMin = 0;
+
+export const getCaseChainOfCustodyResponseReadCountMin = 0;
+
+export const GetCaseChainOfCustodyResponse = zod.object({
+  caseId: zod.string().uuid(),
+  artifactCount: zod
+    .number()
+    .min(getCaseChainOfCustodyResponseArtifactCountMin)
+    .describe("Number of distinct artifacts that have been read at least once"),
+  readCount: zod.number().min(getCaseChainOfCustodyResponseReadCountMin),
+  entries: zod.array(
+    zod.object({
+      executionLogId: zod.string().uuid(),
+      artifactId: zod.string().uuid(),
+      artifactSha256: zod
+        .string()
+        .nullable()
+        .describe(
+          "SHA-256 hash recomputed and verified at the moment of the read.\nnull when the read failed (e.g. integrity violation) — in that\ncase the stored hash is intentionally NOT used as a fallback,\nbecause it cannot be claimed as verified.\n",
+        ),
+      artifactKind: zod.string(),
+      artifactFilename: zod.string().nullable(),
+      toolName: zod.string(),
+      analysisStepId: zod.string().uuid().nullish(),
+      readAt: zod.coerce.date(),
+      ok: zod.boolean(),
+      error: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
  * @summary Get the incident report for a case
  */
 export const GetCaseReportParams = zod.object({

@@ -185,6 +185,36 @@ export interface ArtifactWithContent {
   content: string;
 }
 
+export interface ChainOfCustodyEntry {
+  executionLogId: string;
+  artifactId: string;
+  /** SHA-256 hash recomputed and verified at the moment of the read.
+null when the read failed (e.g. integrity violation) — in that
+case the stored hash is intentionally NOT used as a fallback,
+because it cannot be claimed as verified.
+ */
+  artifactSha256: string | null;
+  artifactKind: string;
+  artifactFilename: string | null;
+  toolName: string;
+  analysisStepId?: string | null;
+  readAt: string;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface ChainOfCustody {
+  caseId: string;
+  /**
+   * Number of distinct artifacts that have been read at least once
+   * @minimum 0
+   */
+  artifactCount: number;
+  /** @minimum 0 */
+  readCount: number;
+  entries: ChainOfCustodyEntry[];
+}
+
 /**
  * Invalid request
  */

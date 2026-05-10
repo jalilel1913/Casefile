@@ -23,6 +23,7 @@ import type {
   BadRequestResponse,
   Case,
   CaseDetail,
+  ChainOfCustody,
   CreateArtifactRequest,
   CreateCaseRequest,
   ExecutionLog,
@@ -957,6 +958,100 @@ export function useListStepLogs<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListStepLogsQueryOptions(stepId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns every artifact-touching tool invocation for the case in
+chronological order, including the SHA-256 hash that was verified at
+read time. This is the auditable record that proves which evidence
+the agent looked at and that it was not tampered with.
+
+ * @summary Chain-of-custody report for a case
+ */
+export const getGetCaseChainOfCustodyUrl = (caseId: string) => {
+  return `/api/cases/${caseId}/chain-of-custody`;
+};
+
+export const getCaseChainOfCustody = async (
+  caseId: string,
+  options?: RequestInit,
+): Promise<ChainOfCustody> => {
+  return customFetch<ChainOfCustody>(getGetCaseChainOfCustodyUrl(caseId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCaseChainOfCustodyQueryKey = (caseId: string) => {
+  return [`/api/cases/${caseId}/chain-of-custody`] as const;
+};
+
+export const getGetCaseChainOfCustodyQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCaseChainOfCustody>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  caseId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCaseChainOfCustody>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetCaseChainOfCustodyQueryKey(caseId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCaseChainOfCustody>>
+  > = ({ signal }) =>
+    getCaseChainOfCustody(caseId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!caseId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCaseChainOfCustody>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCaseChainOfCustodyQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCaseChainOfCustody>>
+>;
+export type GetCaseChainOfCustodyQueryError = ErrorType<NotFoundResponse>;
+
+/**
+ * @summary Chain-of-custody report for a case
+ */
+
+export function useGetCaseChainOfCustody<
+  TData = Awaited<ReturnType<typeof getCaseChainOfCustody>>,
+  TError = ErrorType<NotFoundResponse>,
+>(
+  caseId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCaseChainOfCustody>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCaseChainOfCustodyQueryOptions(caseId, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

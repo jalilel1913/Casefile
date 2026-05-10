@@ -20,6 +20,8 @@ tags:
     description: Raw tool execution audit trail
   - name: reports
     description: Final incident reports
+  - name: integrity
+    description: Evidence chain of custody and integrity proofs
 paths:
   /healthz:
     get:
@@ -214,6 +216,28 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ExecutionLog"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cases/{caseId}/chain-of-custody:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    get:
+      operationId: getCaseChainOfCustody
+      tags: [integrity]
+      summary: Chain-of-custody report for a case
+      description: |
+        Returns every artifact-touching tool invocation for the case in
+        chronological order, including the SHA-256 hash that was verified at
+        read time. This is the auditable record that proves which evidence
+        the agent looked at and that it was not tampered with.
+      responses:
+        "200":
+          description: Chain of custody
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChainOfCustody"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -545,6 +569,63 @@ components:
         error:
           type: string
           nullable: true
+
+    ChainOfCustodyEntry:
+      type: object
+      required: [executionLogId, artifactId, artifactSha256, artifactKind, artifactFilename, toolName, readAt, ok]
+      properties:
+        executionLogId:
+          type: string
+          format: uuid
+        artifactId:
+          type: string
+          format: uuid
+        artifactSha256:
+          type: string
+          nullable: true
+          description: |
+            SHA-256 hash recomputed and verified at the moment of the read.
+            null when the read failed (e.g. integrity violation) — in that
+            case the stored hash is intentionally NOT used as a fallback,
+            because it cannot be claimed as verified.
+        artifactKind:
+          type: string
+        artifactFilename:
+          type: string
+          nullable: true
+        toolName:
+          type: string
+        analysisStepId:
+          type: string
+          format: uuid
+          nullable: true
+        readAt:
+          type: string
+          format: date-time
+        ok:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+
+    ChainOfCustody:
+      type: object
+      required: [caseId, artifactCount, readCount, entries]
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        artifactCount:
+          type: integer
+          minimum: 0
+          description: Number of distinct artifacts that have been read at least once
+        readCount:
+          type: integer
+          minimum: 0
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChainOfCustodyEntry"
 
     IncidentReport:
       type: object
