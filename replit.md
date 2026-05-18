@@ -40,7 +40,7 @@ License: MIT.
 - [x] Step 4 — Forensic tool suite (log parser, IOC extractor, timeline, network, entropy, MCP)
 - [x] Step 5 — Evidence integrity enforcement (architectural read-only boundary)
 - [x] Step 6 — Autonomous agent reasoning loop (streaming SSE)
-- [ ] Step 7 — React frontend case room interface
+- [x] Step 7 — React frontend case room interface
 - [ ] Step 8 — Streaming polish + bundled sample dataset
 
 ## Hackathon Timeline
