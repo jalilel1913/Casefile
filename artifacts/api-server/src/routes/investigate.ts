@@ -5,6 +5,15 @@ import { Router, type IRouter } from "express";
 
 const router: IRouter = Router();
 
+type CaseStatus = "pending" | "analyzing" | "complete" | "failed";
+
+async function setCaseStatus(caseId: string, status: CaseStatus) {
+  await db
+    .update(casesTable)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(casesTable.id, caseId));
+}
+
 router.post("/cases/:caseId/investigate", async (req, res) => {
   const { caseId } = req.params;
 
@@ -39,14 +48,31 @@ router.post("/cases/:caseId/investigate", async (req, res) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
+  // Lifecycle: mark analyzing at start, then resolve to complete / failed
+  // based on the terminal event (finalized → complete, error/spoliation →
+  // failed, otherwise keep analyzing). The DB row defaults to `pending`
+  // until the user actually kicks off an investigation.
+  await setCaseStatus(caseId, "analyzing");
+  let finalStatus: CaseStatus = "failed";
+
   try {
     for await (const ev of runInvestigation({
       caseId,
       isCancelled: () => cancelled,
     })) {
       send(ev.type, ev);
+      if (ev.type === "finalized") {
+        finalStatus = "complete";
+      } else if (ev.type === "error" && ev.fatal) {
+        finalStatus = "failed";
+      } else if (ev.type === "done") {
+        if (ev.reason === "finalized") finalStatus = "complete";
+        else if (ev.reason === "error") finalStatus = "failed";
+        else finalStatus = "complete";
+      }
       if (cancelled) break;
     }
+    if (cancelled) finalStatus = "failed";
   } catch (err) {
     req.log.error({ err, caseId }, "investigation stream crashed");
     send("error", {
@@ -55,7 +81,13 @@ router.post("/cases/:caseId/investigate", async (req, res) => {
       fatal: true,
     });
     send("done", { type: "done", reason: "error" });
+    finalStatus = "failed";
   } finally {
+    try {
+      await setCaseStatus(caseId, finalStatus);
+    } catch (err) {
+      req.log.error({ err, caseId, finalStatus }, "failed to update final case status");
+    }
     res.end();
   }
 });
