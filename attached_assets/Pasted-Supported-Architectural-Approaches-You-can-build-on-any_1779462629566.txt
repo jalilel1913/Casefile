@@ -1,0 +1,12 @@
+Supported Architectural Approaches
+
+You can build on any of these patterns. The platform matters less than how your architecture enforces evidence integrity and enables genuine self-correction.
+
+1. Direct Agent Extension (Claude Code / OpenClaw) --- Extend Protocol SIFT's existing agent loop. Better prompt engineering, smarter tool sequencing, self-correction routines, accuracy validation. This is the on-ramp for most participants and the fastest path to a working submission. OpenClaw's extensible architecture also makes it a natural fit for building custom MCP tool wrappers directly into the tool chain.
+
+2. Custom MCP Server --- Build a purpose-built MCP server that exposes structured functions instead of generic shell commands. Instead of giving the AI execute_shell_cmd, expose typed functions like get_amcache(), extract_mft_timeline(), analyze_prefetch(). The agent physically cannot run destructive commands because the server doesn't have those tools. The MCP server handles raw tool output natively and can parse it before returning to the LLM, preventing context window overload from massive text dumps. (This is the most sound architecture in the evaluation. It's also the most work.)
+
+3. Multi-Agent Frameworks (AutoGen, CrewAI, LangGraph) --- Decompose the analysis into specialized, communicating agents. One agent reviews memory artifacts, another parses disk timelines, a third synthesizes findings. No single model holds all raw data in its context window, which prevents context degradation on complex cases. Agent-to-agent communication is logged programmatically with timestamps and token usage, creating structured execution records. Warning: agent loops can get stuck in infinite conversational spirals without careful termination conditions. Build in max-iteration caps and graceful degradation.
+
+4. Alternative Agentic IDEs (Cursor, Cline, Aider) --- AI-native development environments with their own rule systems. Excellent UI/UX and built-in diff viewing, but designed for software development, not incident response. These tools rely on prompt adherence for evidence protection, not architectural enforcement. If your submission uses an alternative IDE, your accuracy report must document what happens when the model ignores read-only rules.
+
