@@ -27,9 +27,11 @@ app.use(
   }),
 );
 app.use(cors());
-// 12mb headroom — handlers enforce a tighter 10mb limit on artifact content.
-app.use(express.json({ limit: "12mb" }));
-app.use(express.urlencoded({ extended: true, limit: "12mb" }));
+// 96mb headroom — fits a 64MB binary base64-encoded (~85MB) plus JSON
+// envelope. Handlers enforce tighter per-kind limits on artifact content
+// (10 MB text / 64 MB decoded binary).
+app.use(express.json({ limit: "96mb" }));
+app.use(express.urlencoded({ extended: true, limit: "96mb" }));
 
 app.use("/api", router);
 

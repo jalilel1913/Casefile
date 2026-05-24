@@ -16,7 +16,7 @@ import { BadRequestError, NotFoundError, PayloadTooLargeError } from "../lib/err
 import { sha256Hex, sha256HexBytes, utf8ByteLength } from "../lib/hash";
 
 const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024; // 10 MB (text)
-const MAX_BINARY_BYTES = 8 * 1024 * 1024; // 8 MB (decoded base64)
+const MAX_BINARY_BYTES = 64 * 1024 * 1024; // 64 MB (decoded base64)
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
 
 const router: IRouter = Router();
@@ -120,7 +120,7 @@ router.post("/cases/:caseId/artifacts", async (req, res) => {
     if (sizeBytes > MAX_BINARY_BYTES) {
       throw new PayloadTooLargeError(
         "artifact_too_large",
-        `Decoded binary content (${sizeBytes} bytes) exceeds the 8 MB limit`,
+        `Decoded binary content (${sizeBytes} bytes) exceeds the 64 MB limit`,
         { sizeBytes, maxBytes: MAX_BINARY_BYTES },
       );
     }

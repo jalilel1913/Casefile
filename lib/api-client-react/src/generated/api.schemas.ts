@@ -194,7 +194,7 @@ export interface CreateArtifactRequest {
   filename?: string;
   /** Raw evidence content. When `contentEncoding` is `text` (default) the
 UTF-8 byte length is capped at 10 MB. When `contentEncoding` is
-`base64` the decoded byte length is capped at 8 MB.
+`base64` the decoded byte length is capped at 64 MB.
  */
   content: string;
   contentEncoding?: ContentEncoding;

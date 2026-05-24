@@ -112,7 +112,7 @@ paths:
       description: |
         Server computes the SHA256 hash and byte size from the submitted content.
         For `contentEncoding=text`, content is capped at 10 MB of UTF-8.
-        For `contentEncoding=base64`, the decoded payload is capped at 8 MB.
+        For `contentEncoding=base64`, the decoded payload is capped at 64 MB.
         Larger requests return 413.
       requestBody:
         required: true
@@ -455,7 +455,7 @@ components:
           description: |
             Raw evidence content. When `contentEncoding` is `text` (default) the
             UTF-8 byte length is capped at 10 MB. When `contentEncoding` is
-            `base64` the decoded byte length is capped at 8 MB.
+            `base64` the decoded byte length is capped at 64 MB.
         contentEncoding:
           $ref: "#/components/schemas/ContentEncoding"
 

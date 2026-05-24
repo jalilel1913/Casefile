@@ -138,7 +138,7 @@ export default function CaseRoom() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const MAX_TEXT_BYTES = 10 * 1024 * 1024;
-  const MAX_BINARY_BYTES = 8 * 1024 * 1024;
+  const MAX_BINARY_BYTES = 64 * 1024 * 1024;
   const isBinaryKind = artKind === "disk_image";
 
   // Reset encoding state whenever the operator switches kind so we never
@@ -197,7 +197,7 @@ export default function CaseRoom() {
       byteLength = artDecodedSize;
       if (byteLength > MAX_BINARY_BYTES) {
         setUploadError(
-          `Decoded binary is ${(byteLength / 1024 / 1024).toFixed(1)}MB; max is 8MB.`,
+          `Decoded binary is ${(byteLength / 1024 / 1024).toFixed(1)}MB; max is 64MB.`,
         );
         return;
       }
@@ -373,7 +373,7 @@ export default function CaseRoom() {
                           />
                           <p className="text-[10px] font-mono text-muted-foreground">
                             {isBinaryKind
-                              ? "Max 8MB. Read as bytes, base64-encoded on the wire."
+                              ? "Max 64MB. Read as bytes, base64-encoded on the wire."
                               : "Max 10MB. Read as UTF-8 text."}
                           </p>
                         </div>

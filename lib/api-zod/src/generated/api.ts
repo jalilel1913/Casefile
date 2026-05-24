@@ -174,7 +174,7 @@ export const DeleteCaseParams = zod.object({
 /**
  * Server computes the SHA256 hash and byte size from the submitted content.
 For `contentEncoding=text`, content is capped at 10 MB of UTF-8.
-For `contentEncoding=base64`, the decoded payload is capped at 8 MB.
+For `contentEncoding=base64`, the decoded payload is capped at 64 MB.
 Larger requests return 413.
 
  * @summary Upload an evidence artifact
@@ -198,7 +198,7 @@ export const CreateArtifactBody = zod.object({
   content: zod
     .string()
     .describe(
-      "Raw evidence content. When `contentEncoding` is `text` (default) the\nUTF-8 byte length is capped at 10 MB. When `contentEncoding` is\n`base64` the decoded byte length is capped at 8 MB.\n",
+      "Raw evidence content. When `contentEncoding` is `text` (default) the\nUTF-8 byte length is capped at 10 MB. When `contentEncoding` is\n`base64` the decoded byte length is capped at 64 MB.\n",
     ),
   contentEncoding: zod
     .enum(["text", "base64"])
