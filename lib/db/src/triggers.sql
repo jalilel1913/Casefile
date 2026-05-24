@@ -36,21 +36,24 @@ CREATE TRIGGER sift_artifact_immutable
   EXECUTE FUNCTION sift_reject_artifact_mutation();
 
 -- Reject direct DELETE on case_artifacts. The only legitimate way to remove
--- a row is via ON DELETE CASCADE from cases (e.g. when a case is deleted),
--- which Postgres performs in a separate session_user context. To allow
--- cascades while blocking direct deletes, we check current_setting() of a
--- session-local variable set by application code that performs the cascade.
+-- a row is via ON DELETE CASCADE from cases (e.g. when a case is deleted).
 --
--- Simpler and just as safe for this prototype: block ALL deletes from the
--- application connection. Cases themselves can still be deleted, and the
--- artifacts cascade fires the trigger but we exempt the cascade by checking
--- pg_trigger_depth() — when > 0, we're being invoked by another trigger
--- (the FK cascade), and we allow it.
+-- We distinguish the two using pg_trigger_depth():
+--   * Direct user DELETE on case_artifacts → this trigger runs at depth 1.
+--   * FK ON DELETE CASCADE from cases → Postgres's RI system trigger on the
+--     parent occupies depth 1, so this user trigger on the child runs at
+--     depth 2.
+-- Therefore `pg_trigger_depth() > 1` is the cascade case and we allow it;
+-- depth 1 is a direct delete and we reject it.
+--
+-- Verified empirically against this database — see commit message and
+-- docs/accuracy-report.md for the test transcript. Do NOT "fix" this to
+-- `> 0`: that would allow direct deletes (depth 1 > 0 is true).
 CREATE OR REPLACE FUNCTION sift_reject_artifact_delete()
 RETURNS TRIGGER AS $$
 BEGIN
   IF pg_trigger_depth() > 1 THEN
-    -- Cascading from another trigger (e.g. cases ON DELETE CASCADE). Allow.
+    -- Cascading from the FK RI trigger on cases. Allow.
     RETURN OLD;
   END IF;
   RAISE EXCEPTION 'Evidence artifact is immutable: direct DELETE on case_artifacts is forbidden (id=%). Delete the parent case to cascade-remove.', OLD.id

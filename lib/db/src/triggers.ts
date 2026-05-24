@@ -25,6 +25,11 @@ CREATE TRIGGER sift_artifact_immutable
   FOR EACH ROW
   EXECUTE FUNCTION sift_reject_artifact_mutation();
 
+-- Reject direct DELETE on case_artifacts. Cascades from cases must still work.
+-- Direct user DELETE → pg_trigger_depth() = 1 (reject).
+-- FK ON DELETE CASCADE from cases → the parent's RI trigger occupies depth 1,
+-- so this trigger fires at depth 2 (allow). Do NOT change to > 0: that would
+-- allow direct deletes. Empirically verified against the production schema.
 CREATE OR REPLACE FUNCTION sift_reject_artifact_delete()
 RETURNS TRIGGER AS $$
 BEGIN
