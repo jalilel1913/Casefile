@@ -1,8 +1,8 @@
-# Protocol SIFT — Analyst Training Loop
+# Casefile — Analyst Training Loop
 
 ## Overview
 
-Protocol SIFT is a fully autonomous incident response agent that processes forensic case data
+Casefile is a fully autonomous incident response agent that processes forensic case data
 (logs, network captures, memory strings, MCP endpoints) and explains its reasoning at every
 step. Designed to train junior analysts by making the senior-analyst decision-making process
 transparent — what tool was chosen, why, what was expected, what was actually found, and how

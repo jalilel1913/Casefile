@@ -1,5 +1,5 @@
 -- ============================================================================
--- Protocol SIFT — Evidence Integrity Triggers
+-- Casefile — Evidence Integrity Triggers
 -- ----------------------------------------------------------------------------
 -- These triggers enforce the architectural invariant that evidence artifacts,
 -- once stored, are immutable. The integrity-bearing columns of case_artifacts

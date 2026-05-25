@@ -1,6 +1,6 @@
-# Protocol SIFT — Sample Dataset
+# Casefile — Sample Dataset
 
-Four sample cases ship with Protocol SIFT, bundled into the UI as
+Four sample cases ship with Casefile, bundled into the UI as
 one-click "Load sample" buttons and into the accuracy harness as the
 fixed evaluation set. They were hand-authored to be realistic in shape
 and content, not collected from real customer incidents.

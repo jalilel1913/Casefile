@@ -80,7 +80,7 @@ export default function CaseList() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 font-mono text-[9px] tracking-[0.25em] text-primary/80 uppercase">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            <span>protocol_sift // online</span>
+            <span>casefile // online</span>
           </div>
           <div className="h-6 w-px bg-border mx-1" />
           <div className="flex items-baseline gap-1.5 font-mono leading-none">

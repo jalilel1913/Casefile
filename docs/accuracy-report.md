@@ -1,4 +1,4 @@
-# Protocol SIFT — Accuracy Report
+# Casefile — Accuracy Report
 
 **Run date:** 2026-05-23
 **Model:** gpt-5 (via Replit OpenAI integration)

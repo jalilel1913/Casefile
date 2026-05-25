@@ -1,6 +1,6 @@
-# Protocol SIFT — Architecture
+# Casefile — Architecture
 
-Protocol SIFT is an autonomous incident-response agent. A human uploads
+Casefile is an autonomous incident-response agent. A human uploads
 evidence (logs, network captures, suspicious files) into a case folder
 and the system investigates end-to-end: forms hypotheses, runs forensic
 tools, records findings as it goes, and produces a final incident report
@@ -20,7 +20,7 @@ flowchart TB
 
     subgraph Server["Replit container"]
         API["API Server (Fastify)<br/>artifacts/api-server"]
-        Agent["SIFT Agent (reasoning loop)<br/>lib/sift-agent"]
+        Agent["Casefile Agent (reasoning loop)<br/>lib/sift-agent"]
         Tools["Forensic tools (pure functions)<br/>lib/sift-tools"]
         DB[("Postgres<br/>lib/db<br/>+ integrity triggers")]
     end
@@ -109,7 +109,7 @@ sequenceDiagram
 
 ## Evidence-integrity model
 
-The brief asks for an agent whose conclusions can be trusted. SIFT
+The brief asks for an agent whose conclusions can be trusted. Casefile
 treats that as three concentric layers, all enforced — not advisory.
 
 ```mermaid

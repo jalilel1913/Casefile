@@ -1,10 +1,10 @@
-# Protocol SIFT — Written Description
+# Casefile — Written Description
 
 ## What it is
 
-Protocol SIFT is a fully autonomous incident-response (IR) agent. A
+Casefile is a fully autonomous incident-response (IR) agent. A
 human uploads evidence — logs, network captures, suspicious files,
-host-context notes — into a case folder and SIFT investigates it
+host-context notes — into a case folder and Casefile investigates it
 end-to-end: forms hypotheses, runs forensic tools to test them, records
 its reasoning as it goes, and produces a final incident report with
 severity, IOCs, a chronological timeline, recommendations, a numeric
@@ -17,7 +17,7 @@ output is reproducible.
 
 ## The problem
 
-Two real problems push in opposite directions, and SIFT addresses both
+Two real problems push in opposite directions, and Casefile addresses both
 at once.
 
 **1. Senior analysts cannot scale.** The bottleneck in any blue team
@@ -34,7 +34,7 @@ record with hallucinated indicators that a human then has to disprove.
 The brief for this hackathon asked for an agent whose conclusions are
 *verifiable*, not just plausible.
 
-SIFT is built to be useful for the first problem only because it is
+Casefile is built to be useful for the first problem only because it is
 trustworthy for the second.
 
 ## Who it is for
@@ -45,7 +45,7 @@ trustworthy for the second.
 - **SOC managers**, who get a fully auto-triaged first pass on
   incoming cases with a confidence score and severity that they can
   use to route work.
-- **Red/blue tabletop exercises**, where SIFT can be pointed at a
+- **Red/blue tabletop exercises**, where Casefile can be pointed at a
   scenario and used as a synthetic adversary or a synthetic responder
   for training.
 
@@ -83,7 +83,7 @@ The system is one Postgres-backed Fastify service with three layers:
 ### The evidence-integrity invariant
 
 A judge reading the brief asked: *if the LLM tries to lie about what
-the evidence said, how do you catch it?* SIFT answers in three layers,
+the evidence said, how do you catch it?* Casefile answers in three layers,
 all enforced rather than advised.
 
 **Storage immutability.** Two `BEFORE` triggers on `case_artifacts`
@@ -134,7 +134,7 @@ called `finalize`, not truncated by a max-iteration guard).
 ## What is novel
 
 - **Database-enforced evidence immutability.** Most agent frameworks
-  treat artifact integrity as an application-layer convention. SIFT
+  treat artifact integrity as an application-layer convention. Casefile
   treats it as a database constraint. A new contributor who writes a
   code path that tries to mutate `case_artifacts.content` gets an
   exception from Postgres, not a code review comment.

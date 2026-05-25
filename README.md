@@ -1,8 +1,8 @@
-# Protocol SIFT — Autonomous Incident-Response Agent
+# Casefile — Autonomous Incident-Response Agent
 
-Protocol SIFT is a fully autonomous incident-response agent. A human
+Casefile is a fully autonomous incident-response agent. A human
 uploads evidence (logs, network captures, suspicious files) into a
-case folder and SIFT investigates end-to-end: forms hypotheses, runs
+case folder and Casefile investigates end-to-end: forms hypotheses, runs
 forensic tools to test them, records its reasoning as it goes, and
 produces a final incident report with severity, IOCs, a chronological
 timeline, recommendations, a numeric confidence score, and a
@@ -92,7 +92,7 @@ serves the UI and the `/api/*` routes from the same origin.
 
 ## A 5-minute guided walkthrough
 
-The fastest way to see what SIFT does:
+The fastest way to see what Casefile does:
 
 1. Load the **Encoded PowerShell** sample case. (`docs/dataset.md`
    describes the scenario.)

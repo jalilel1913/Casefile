@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "Protocol SIFT — Case Room"
+title = "Casefile — Case Room"
 version = "1.0.0"
 id = "artifacts/case-room"
 router = "path"
