@@ -28,8 +28,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format, formatDistanceToNow } from "date-fns";
-import { Terminal, Plus, ArrowRight, Sparkles, FileStack, Trash2 } from "lucide-react";
+import { Terminal, Plus, ArrowRight, Sparkles, FileStack, Trash2, X } from "lucide-react";
 import { SAMPLE_CASES, type SampleCase } from "@/lib/sample-cases";
 
 export default function CaseList() {
@@ -43,6 +44,11 @@ export default function CaseList() {
   const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
   const [sampleError, setSampleError] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
   const deleteCase = useDeleteCase({
     mutation: {
       onSuccess: () => {
@@ -51,6 +57,58 @@ export default function CaseList() {
     },
   });
   const pendingDeleteCase = cases?.find((c) => c.id === pendingDeleteId) ?? null;
+
+  // Cases that are currently analyzing can't be deleted (we don't yank
+  // evidence out from under a running investigation), so they're excluded
+  // from selection and the select-all set.
+  const selectableCases = (cases ?? []).filter((c) => c.status !== "analyzing");
+  const allSelectableSelected =
+    selectableCases.length > 0 &&
+    selectableCases.every((c) => selectedIds.has(c.id));
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setBulkDeleteError(null);
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map((id) => deleteCase.mutateAsync({ caseId: id })),
+      );
+      const failedIds = ids.filter((_, i) => results[i].status === "rejected");
+      queryClient.invalidateQueries({ queryKey: getListCasesQueryKey() });
+      if (failedIds.length === 0) {
+        setBulkConfirmOpen(false);
+        exitSelectMode();
+      } else {
+        // Keep only the cases that failed to delete selected so the user can
+        // retry without re-deleting cases that already succeeded (which would
+        // 404). Keep the dialog open with an error so they can retry directly.
+        setSelectedIds(new Set(failedIds));
+        setBulkDeleteError(
+          `Failed to delete ${failedIds.length} of ${ids.length} ${
+            ids.length === 1 ? "case" : "cases"
+          }. The remaining selection can be retried.`,
+        );
+      }
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,10 +282,56 @@ export default function CaseList() {
         </section>
 
         <section>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
             <h2 className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
               Active Investigations
             </h2>
+            {cases && cases.length > 0 && (
+              selectMode ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (allSelectableSelected) {
+                        setSelectedIds(new Set());
+                      } else {
+                        setSelectedIds(new Set(selectableCases.map((c) => c.id)));
+                      }
+                    }}
+                    disabled={selectableCases.length === 0}
+                    className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground hover:text-foreground border border-border rounded px-2 py-1 disabled:opacity-30 transition-colors"
+                  >
+                    {allSelectableSelected ? "Clear all" : "Select all"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkDeleteError(null);
+                      setBulkConfirmOpen(true);
+                    }}
+                    disabled={selectedIds.size === 0}
+                    className="text-[10px] font-mono uppercase tracking-widest text-destructive hover:bg-destructive/10 border border-destructive/30 rounded px-2 py-1 disabled:opacity-30 disabled:hover:bg-transparent transition-colors flex items-center gap-1.5"
+                  >
+                    <Trash2 size={12} /> Delete{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exitSelectMode}
+                    className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground hover:text-foreground border border-border rounded px-2 py-1 transition-colors flex items-center gap-1.5"
+                  >
+                    <X size={12} /> Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSelectMode(true)}
+                  className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground hover:text-foreground border border-border rounded px-2 py-1 transition-colors"
+                >
+                  Select
+                </button>
+              )
+            )}
           </div>
         {isLoading ? (
           <div className="flex items-center justify-center h-64 text-primary font-mono animate-pulse">
@@ -240,10 +344,29 @@ export default function CaseList() {
           </div>
         ) : (
           <div className="grid gap-3">
-            {cases.map((c) => (
-              <Link key={c.id} href={`/cases/${c.id}`}>
-                <div className="group border border-border bg-card hover:bg-secondary/40 hover:border-primary/50 transition-colors rounded p-4 flex items-center justify-between cursor-pointer">
+            {cases.map((c) => {
+              const isSelected = selectedIds.has(c.id);
+              const isSelectable = c.status !== "analyzing";
+              const rowInner = (
+                <div className={`group border bg-card transition-colors rounded p-4 flex items-center justify-between ${
+                  selectMode
+                    ? isSelectable
+                      ? `cursor-pointer ${isSelected ? "border-primary/70 bg-secondary/40" : "border-border hover:border-primary/50"}`
+                      : "border-border opacity-50 cursor-not-allowed"
+                    : "border-border hover:bg-secondary/40 hover:border-primary/50 cursor-pointer"
+                }`}>
                   <div className="flex items-center gap-4">
+                    {selectMode && (
+                      <span onClick={(e) => e.stopPropagation()} className="flex">
+                        <Checkbox
+                          checked={isSelected}
+                          disabled={!isSelectable}
+                          onCheckedChange={() => isSelectable && toggleSelected(c.id)}
+                          aria-label={`Select ${c.title}`}
+                          className="shrink-0"
+                        />
+                      </span>
+                    )}
                     <div className={`w-2 h-10 rounded-full ${
                       c.status === 'analyzing' ? 'bg-amber-400 animate-pulse' :
                       c.status === 'complete' ? 'bg-primary' :
@@ -273,26 +396,45 @@ export default function CaseList() {
                       <h3 className="font-semibold text-foreground tracking-tight truncate">{c.title}</h3>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setPendingDeleteId(c.id);
-                      }}
-                      disabled={c.status === 'analyzing'}
-                      title={c.status === 'analyzing' ? 'Cannot delete while analyzing' : 'Delete case'}
-                      aria-label="Delete case"
-                      className="p-2 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground disabled:cursor-not-allowed transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                    <ArrowRight className="text-muted-foreground group-hover:text-primary transition-colors ml-1" size={20} />
-                  </div>
+                  {!selectMode && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setPendingDeleteId(c.id);
+                        }}
+                        disabled={c.status === 'analyzing'}
+                        title={c.status === 'analyzing' ? 'Cannot delete while analyzing' : 'Delete case'}
+                        aria-label="Delete case"
+                        className="p-2 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground disabled:cursor-not-allowed transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                      <ArrowRight className="text-muted-foreground group-hover:text-primary transition-colors ml-1" size={20} />
+                    </div>
+                  )}
                 </div>
-              </Link>
-            ))}
+              );
+
+              if (selectMode) {
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => isSelectable && toggleSelected(c.id)}
+                  >
+                    {rowInner}
+                  </div>
+                );
+              }
+
+              return (
+                <Link key={c.id} href={`/cases/${c.id}`}>
+                  {rowInner}
+                </Link>
+              );
+            })}
           </div>
         )}
         </section>
@@ -334,6 +476,49 @@ export default function CaseList() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteCase.isPending ? "Deleting..." : "Delete case"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={bulkConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open && !isBulkDeleting) setBulkConfirmOpen(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size} {selectedIds.size === 1 ? "case" : "cases"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the selected{" "}
+              {selectedIds.size === 1 ? "case" : "cases"} and cascades to all
+              uploaded evidence, analysis steps, execution logs, and incident
+              reports. Chain-of-custody history for{" "}
+              {selectedIds.size === 1 ? "this case" : "these cases"} will be
+              lost. This cannot be undone.
+            </AlertDialogDescription>
+            {bulkDeleteError && (
+              <div className="mt-2 text-xs font-mono text-destructive border border-destructive/30 bg-destructive/10 rounded p-2">
+                {bulkDeleteError}
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isBulkDeleting}
+              onClick={(e) => {
+                e.preventDefault();
+                handleBulkDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting
+                ? "Deleting..."
+                : `Delete ${selectedIds.size} ${selectedIds.size === 1 ? "case" : "cases"}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
