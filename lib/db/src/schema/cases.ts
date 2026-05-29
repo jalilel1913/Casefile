@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -14,6 +14,7 @@ export const casesTable = pgTable("cases", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   status: caseStatusEnum("status").notNull().default("pending"),
+  ownerUserId: varchar("owner_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -25,6 +26,7 @@ export const casesTable = pgTable("cases", {
 export const insertCaseSchema = createInsertSchema(casesTable).omit({
   id: true,
   status: true,
+  ownerUserId: true,
   createdAt: true,
   updatedAt: true,
 });

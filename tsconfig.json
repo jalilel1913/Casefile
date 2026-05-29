@@ -20,6 +20,9 @@
     },
     {
       "path": "./lib/sift-agent"
+    },
+    {
+      "path": "./lib/replit-auth-web"
     }
   ]
 }

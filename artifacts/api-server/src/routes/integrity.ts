@@ -6,19 +6,13 @@ import {
 } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
-import { NotFoundError } from "../lib/errors";
+import { requireCaseAccessId } from "../lib/case-auth";
 
 const router: IRouter = Router();
 
 router.get("/cases/:caseId/chain-of-custody", async (req, res) => {
   const { caseId } = req.params;
-  const [caseRow] = await db
-    .select({ id: casesTable.id })
-    .from(casesTable)
-    .where(eq(casesTable.id, caseId));
-  if (!caseRow) {
-    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
-  }
+  await requireCaseAccessId(caseId, req.user!.id);
 
   const rows = await db
     .select({
@@ -45,9 +39,6 @@ router.get("/cases/:caseId/chain-of-custody", async (req, res) => {
   const entries = rows.map((r) => {
     seenArtifacts.add(r.artifactId!);
     const input = (r.input ?? {}) as { sha256?: string | null };
-    // Only the hash that was actually recomputed-and-verified at read time
-    // is reported. We intentionally do NOT fall back to the stored hash,
-    // because the stored value cannot be claimed as "verified at read time".
     const verifiedHash =
       typeof input.sha256 === "string" && input.sha256.length === 64
         ? input.sha256

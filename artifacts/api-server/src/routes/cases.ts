@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-zod";
 import { BadRequestError, NotFoundError, PayloadTooLargeError } from "../lib/errors";
 import { sha256Hex, sha256HexBytes, utf8ByteLength } from "../lib/hash";
+import { requireCaseAccess, requireCaseAccessId } from "../lib/case-auth";
 
 const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024; // 10 MB (text)
 const MAX_BINARY_BYTES = 64 * 1024 * 1024; // 64 MB (decoded base64)
@@ -23,14 +24,19 @@ const router: IRouter = Router();
 
 router.post("/cases", async (req, res) => {
   const body = CreateCaseBody.parse(req.body);
-  const [created] = await db.insert(casesTable).values(body).returning();
+  const [created] = await db
+    .insert(casesTable)
+    .values({ ...body, ownerUserId: req.user!.id })
+    .returning();
   res.status(201).json(created);
 });
 
-router.get("/cases", async (_req, res) => {
+router.get("/cases", async (req, res) => {
+  const userId = req.user!.id;
   const rows = await db
     .select()
     .from(casesTable)
+    .where(eq(casesTable.ownerUserId, userId))
     .orderBy(desc(casesTable.createdAt))
     .limit(200);
   res.json(rows);
@@ -38,13 +44,7 @@ router.get("/cases", async (_req, res) => {
 
 router.get("/cases/:caseId", async (req, res) => {
   const { caseId } = req.params;
-  const [caseRow] = await db
-    .select()
-    .from(casesTable)
-    .where(eq(casesTable.id, caseId));
-  if (!caseRow) {
-    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
-  }
+  const caseRow = await requireCaseAccess(caseId, req.user!.id);
 
   const [artifacts, steps, logs, [report]] = await Promise.all([
     db
@@ -88,13 +88,8 @@ router.get("/cases/:caseId", async (req, res) => {
 
 router.delete("/cases/:caseId", async (req, res) => {
   const { caseId } = req.params;
-  const result = await db
-    .delete(casesTable)
-    .where(eq(casesTable.id, caseId))
-    .returning({ id: casesTable.id });
-  if (result.length === 0) {
-    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
-  }
+  await requireCaseAccessId(caseId, req.user!.id);
+  await db.delete(casesTable).where(eq(casesTable.id, caseId));
   res.status(204).send();
 });
 
@@ -110,8 +105,6 @@ router.post("/cases/:caseId/artifacts", async (req, res) => {
     );
   }
 
-  // For text artifacts the SHA-256 is over the UTF-8 byte stream; for base64
-  // artifacts it is over the decoded payload so hashes match `sha256sum file`.
   let storedHash: string;
   let sizeBytes: number;
   if (encoding === "base64") {
@@ -151,7 +144,6 @@ router.post("/cases/:caseId/artifacts", async (req, res) => {
       );
     }
     try {
-      // eslint-disable-next-line no-new
       new URL(body.content);
     } catch {
       throw new BadRequestError(
@@ -161,13 +153,7 @@ router.post("/cases/:caseId/artifacts", async (req, res) => {
     }
   }
 
-  const [parent] = await db
-    .select({ id: casesTable.id })
-    .from(casesTable)
-    .where(eq(casesTable.id, caseId));
-  if (!parent) {
-    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
-  }
+  await requireCaseAccessId(caseId, req.user!.id);
 
   const [created] = await db
     .insert(caseArtifactsTable)
@@ -195,13 +181,7 @@ router.post("/cases/:caseId/artifacts", async (req, res) => {
 
 router.get("/cases/:caseId/artifacts", async (req, res) => {
   const { caseId } = req.params;
-  const [parent] = await db
-    .select({ id: casesTable.id })
-    .from(casesTable)
-    .where(eq(casesTable.id, caseId));
-  if (!parent) {
-    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
-  }
+  await requireCaseAccessId(caseId, req.user!.id);
 
   const rows = await db
     .select({
@@ -222,13 +202,7 @@ router.get("/cases/:caseId/artifacts", async (req, res) => {
 
 router.get("/cases/:caseId/steps", async (req, res) => {
   const { caseId } = req.params;
-  const [parent] = await db
-    .select({ id: casesTable.id })
-    .from(casesTable)
-    .where(eq(casesTable.id, caseId));
-  if (!parent) {
-    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
-  }
+  await requireCaseAccessId(caseId, req.user!.id);
 
   const rows = await db
     .select()
@@ -241,13 +215,7 @@ router.get("/cases/:caseId/steps", async (req, res) => {
 
 router.get("/cases/:caseId/logs", async (req, res) => {
   const { caseId } = req.params;
-  const [parent] = await db
-    .select({ id: casesTable.id })
-    .from(casesTable)
-    .where(eq(casesTable.id, caseId));
-  if (!parent) {
-    throw new NotFoundError("case_not_found", `Case ${caseId} not found`);
-  }
+  await requireCaseAccessId(caseId, req.user!.id);
 
   const rows = await db
     .select()
@@ -260,6 +228,8 @@ router.get("/cases/:caseId/logs", async (req, res) => {
 
 router.get("/cases/:caseId/report", async (req, res) => {
   const { caseId } = req.params;
+  await requireCaseAccessId(caseId, req.user!.id);
+
   const [report] = await db
     .select()
     .from(incidentReportsTable)

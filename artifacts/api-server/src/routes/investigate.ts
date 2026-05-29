@@ -2,10 +2,24 @@ import { runInvestigation } from "@workspace/sift-agent";
 import { db, casesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
+import rateLimit from "express-rate-limit";
+import { requireCaseAccessId } from "../lib/case-auth";
 
 const router: IRouter = Router();
 
 type CaseStatus = "pending" | "analyzing" | "complete" | "failed";
+
+const activeInvestigations = new Set<string>();
+
+const investigateRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.id ?? "anonymous",
+  validate: { ip: false },
+  message: { error: "Too many investigation requests. Please wait before retrying." },
+});
 
 async function setCaseStatus(caseId: string, status: CaseStatus) {
   await db
@@ -14,23 +28,32 @@ async function setCaseStatus(caseId: string, status: CaseStatus) {
     .where(eq(casesTable.id, caseId));
 }
 
-router.post("/cases/:caseId/investigate", async (req, res) => {
-  const { caseId } = req.params;
+router.post("/cases/:caseId/investigate", investigateRateLimit, async (req, res) => {
+  const caseId = req.params.caseId as string;
 
   // Preflight: the OpenAPI spec advertises 404 for unknown cases, so the
   // existence check must happen BEFORE we flip the response into SSE mode.
   // Once we've sent SSE headers we can no longer return a JSON 404.
-  const [caseRow] = await db
-    .select({ id: casesTable.id })
-    .from(casesTable)
-    .where(eq(casesTable.id, caseId));
-  if (!caseRow) {
+  let caseRow: { id: string };
+  try {
+    caseRow = await requireCaseAccessId(caseId, req.user!.id);
+  } catch {
     res.status(404).json({
       error: "not_found",
       message: `Case ${caseId} not found`,
     });
     return;
   }
+
+  if (activeInvestigations.has(caseId)) {
+    res.status(409).json({
+      error: "conflict",
+      message: "An investigation is already running for this case.",
+    });
+    return;
+  }
+
+  activeInvestigations.add(caseId);
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -83,6 +106,7 @@ router.post("/cases/:caseId/investigate", async (req, res) => {
     send("done", { type: "done", reason: "error" });
     finalStatus = "failed";
   } finally {
+    activeInvestigations.delete(caseId);
     try {
       await setCaseStatus(caseId, finalStatus);
     } catch (err) {

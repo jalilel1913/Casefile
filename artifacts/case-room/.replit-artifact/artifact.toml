@@ -1,31 +1,27 @@
 kind = "web"
-previewPath = "/"
-title = "Casefile — Case Room"
-version = "1.0.0"
-id = "artifacts/case-room"
-router = "path"
+  previewPath = "/"
+  title = "Casefile — Case Room"
+  version = "1.0.0"
+  id = "artifacts/case-room"
+  router = "path"
 
-[[integratedSkills]]
-name = "react-vite"
-version = "1.0.0"
+  [[integratedSkills]]
+  name = "react-vite"
+  version = "1.0.0"
 
-[[services]]
-name = "web"
-paths = [ "/" ]
-localPort = 20851
+  [[services]]
+  name = "web"
+  paths = ["/"]
+  localPort = 20851
 
-[services.development]
-run = "pnpm --filter @workspace/case-room run dev"
+  [services.development]
+  run = "pnpm --filter @workspace/case-room run dev"
 
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/case-room", "run", "build" ]
-publicDir = "artifacts/case-room/dist/public"
-serve = "static"
+  [services.production]
+  build = ["pnpm", "--filter", "@workspace/case-room", "run", "build"]
+  run = ["pnpm", "--filter", "@workspace/case-room", "run", "serve"]
 
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
-
-[services.env]
-PORT = "20851"
-BASE_PATH = "/"
+  [services.env]
+  PORT = "20851"
+  BASE_PATH = "/"
+  
