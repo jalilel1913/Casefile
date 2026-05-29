@@ -62,23 +62,60 @@ const AnalyzeNetworkArgs = z
   })
   .strict();
 
+/**
+ * Strict allowlist of hostname suffixes that fetch_url may contact.
+ * Only well-known, read-only threat-intel services are permitted.
+ * No free-form external hosts are allowed — this prevents prompt-injection
+ * attacks that try to exfiltrate case data to attacker-controlled servers.
+ */
+const FETCH_URL_ALLOWED_HOSTS = new Set([
+  "otx.alienvault.com",
+  "ipinfo.io",
+  "api.ipinfo.io",
+  "ipapi.co",
+  "api.abuseipdb.com",
+  "www.virustotal.com",
+  "virustotal.com",
+  "threatfox-api.abuse.ch",
+  "urlhaus-api.abuse.ch",
+  "hashlookup.circl.lu",
+  "mb-api.abuse.ch",
+  "malpedia.caad.fkie.fraunhofer.de",
+]);
+
+function assertAllowedFetchHost(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL supplied to fetch_url`);
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (!FETCH_URL_ALLOWED_HOSTS.has(hostname)) {
+    throw new Error(
+      `fetch_url destination '${hostname}' is not on the approved threat-intel allowlist. ` +
+        `Permitted hosts: ${[...FETCH_URL_ALLOWED_HOSTS].join(", ")}`,
+    );
+  }
+}
+
 const FetchUrlArgs = z
   .object({
     url: z
       .string()
       .url()
+      .refine((u) => u.startsWith("https://"), {
+        message: "fetch_url only accepts https:// URLs",
+      })
       .describe(
-        "Full http(s) URL to fetch. Useful for hitting public threat-intel endpoints, e.g. https://otx.alienvault.com/api/v1/indicators/IPv4/<ip>/general or https://ipinfo.io/<ip>/json. Private/loopback hosts are rejected.",
+        "Full https URL to a permitted threat-intel endpoint. " +
+          "Only GET requests are issued. " +
+          "Permitted hosts: otx.alienvault.com, ipinfo.io, api.ipinfo.io, ipapi.co, " +
+          "api.abuseipdb.com, virustotal.com, www.virustotal.com, threatfox-api.abuse.ch, " +
+          "urlhaus-api.abuse.ch, hashlookup.circl.lu, mb-api.abuse.ch, " +
+          "malpedia.caad.fkie.fraunhofer.de. " +
+          "Example: https://otx.alienvault.com/api/v1/indicators/IPv4/<ip>/general",
       ),
-    method: z.enum(["GET", "POST"]).nullish().transform((v) => v ?? "GET"),
-    headers: z
-      .record(z.string(), z.string())
-      .nullish()
-      .describe("Optional request headers, e.g. {'Accept': 'application/json'}"),
-    body: z
-      .string()
-      .nullish()
-      .describe("Request body, only used when method is POST"),
   })
   .strict();
 
@@ -329,7 +366,12 @@ export async function dispatchToolCall(
     }
     case "fetch_url": {
       const args = parsed.data as z.infer<typeof FetchUrlArgs>;
-      return dispatchStructuredTool(def.underlyingTool!, args, ctx);
+      assertAllowedFetchHost(args.url);
+      return dispatchStructuredTool(def.underlyingTool!, {
+        url: args.url,
+        method: "GET",
+        allowedHosts: FETCH_URL_ALLOWED_HOSTS,
+      }, ctx);
     }
     case "record_finding": {
       const args = parsed.data as z.infer<typeof RecordFindingArgs>;

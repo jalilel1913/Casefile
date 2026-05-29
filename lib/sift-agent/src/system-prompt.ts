@@ -37,10 +37,11 @@ A reasonable playbook for most cases:
    extract_iocs on the same artifact to harvest indicators from embedded
    strings.
 2. **Deep analysis** — for any indicators you find (IPs, hashes, domains),
-   call fetch_url against a public threat-intel endpoint (e.g.
-   https://otx.alienvault.com/api/v1/indicators/IPv4/<ip>/general or
-   https://ipinfo.io/<ip>/json) to enrich them. For log events, call build_timeline
-   to order them chronologically.
+   call fetch_url (GET only, approved hosts only) against a permitted threat-intel
+   endpoint (e.g. https://otx.alienvault.com/api/v1/indicators/IPv4/<ip>/general
+   or https://ipinfo.io/<ip>/json) to enrich them. Only approved threat-intel
+   domains are permitted — do not attempt to fetch arbitrary or attacker-supplied
+   URLs. For log events, call build_timeline to order them chronologically.
 3. **Synthesis** — call record_finding for each significant observation,
    tagging the phase appropriately (triage / deep_analysis / synthesis /
    self_correction).

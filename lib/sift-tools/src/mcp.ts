@@ -10,6 +10,13 @@ export const McpFetcherInput = z.object({
   body: z.string().nullish(),
   timeoutMs: z.number().int().min(100).max(30000).default(10000),
   maxBytes: z.number().int().min(1024).max(2_000_000).default(500_000),
+  /**
+   * Optional set of approved hostnames. When provided, every URL that is
+   * fetched or redirected to must have a hostname in this set. This is the
+   * network-layer enforcement point for the agent's threat-intel allowlist —
+   * it catches redirect chains that escape the approved host set.
+   */
+  allowedHosts: z.set(z.string()).nullish(),
 });
 export type McpFetcherInput = z.infer<typeof McpFetcherInput>;
 
@@ -114,7 +121,7 @@ export const mcpFetcher: ToolDescriptor<typeof McpFetcherInput, typeof McpFetche
     "Fetches an external HTTP(S) URL and returns the response body as text along with status code, content-type, and byte length. Has a hard timeout and response-size cap. Refuses requests to private/loopback hostnames or IP literals (decimal/hex-encoded IPv4, IPv6 loopback/ULA/link-local), and additionally resolves the hostname via DNS and refuses any name that resolves to a private/loopback/CGNAT/multicast address (SSRF defense in depth). This is the only tool in the suite that touches the network.",
   inputSchema: McpFetcherInput,
   outputSchema: McpFetcherOutput,
-  run: async ({ url, method, headers, body, timeoutMs, maxBytes }) => {
+  run: async ({ url, method, headers, body, timeoutMs, maxBytes, allowedHosts }) => {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       throw new Error(`Refusing non-http(s) scheme '${parsed.protocol}'`);
@@ -127,22 +134,70 @@ export const mcpFetcher: ToolDescriptor<typeof McpFetcherInput, typeof McpFetche
     if (dnsReason) {
       throw new Error(`Refusing to fetch ${dnsReason} — SSRF protection`);
     }
+    // Enforce allowlist on the initial URL (callers such as the agent adapter
+    // also pre-check this, but we validate here too so the policy is upheld
+    // even when mcpFetcher is invoked directly).
+    if (allowedHosts != null && !allowedHosts.has(parsed.hostname.toLowerCase())) {
+      throw new Error(
+        `Refusing to fetch '${parsed.hostname}' — not in the approved host allowlist`,
+      );
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const startedAt = Date.now();
+    const MAX_REDIRECTS = 5;
     try {
-      const res = await fetch(url, {
-        method,
-        headers: headers ?? {},
-        body: method === "POST" ? body : undefined,
-        signal: controller.signal,
-      });
+      let currentUrl = url;
+      let redirectsFollowed = 0;
+      let res: Response;
+      while (true) {
+        res = await fetch(currentUrl, {
+          method,
+          headers: headers ?? {},
+          body: method === "POST" ? body : undefined,
+          signal: controller.signal,
+          redirect: "manual",
+        });
+        if (res.status >= 300 && res.status < 400) {
+          if (redirectsFollowed >= MAX_REDIRECTS) {
+            throw new Error(`Too many redirects (limit ${MAX_REDIRECTS})`);
+          }
+          const location = res.headers.get("location");
+          if (!location) {
+            throw new Error(`Redirect response missing Location header`);
+          }
+          // Resolve relative redirect URLs against the current URL
+          const redirectUrl = new URL(location, currentUrl);
+          if (redirectUrl.protocol !== "http:" && redirectUrl.protocol !== "https:") {
+            throw new Error(`Refusing redirect to non-http(s) scheme '${redirectUrl.protocol}' — SSRF protection`);
+          }
+          const redirectLiteralReason = isPrivateOrInvalidHost(redirectUrl.hostname);
+          if (redirectLiteralReason) {
+            throw new Error(`Refusing redirect to ${redirectLiteralReason} — SSRF protection`);
+          }
+          const redirectDnsReason = await resolvesToPrivate(redirectUrl.hostname);
+          if (redirectDnsReason) {
+            throw new Error(`Refusing redirect to ${redirectDnsReason} — SSRF protection`);
+          }
+          // Enforce allowlist on each redirect target so an allowlisted domain
+          // cannot chain out to an arbitrary public host for exfiltration.
+          if (allowedHosts != null && !allowedHosts.has(redirectUrl.hostname.toLowerCase())) {
+            throw new Error(
+              `Refusing redirect to '${redirectUrl.hostname}' — not in the approved host allowlist`,
+            );
+          }
+          currentUrl = redirectUrl.href;
+          redirectsFollowed += 1;
+          continue;
+        }
+        break;
+      }
       const buf = new Uint8Array(await res.arrayBuffer());
       const truncated = buf.byteLength > maxBytes;
       const slice = truncated ? buf.subarray(0, maxBytes) : buf;
       const text = new TextDecoder("utf-8", { fatal: false }).decode(slice);
       return {
-        url,
+        url: currentUrl,
         status: res.status,
         ok: res.ok,
         contentType: res.headers.get("content-type"),
