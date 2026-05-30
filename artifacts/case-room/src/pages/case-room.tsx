@@ -319,10 +319,10 @@ export default function CaseRoom() {
       </header>
 
       {/* Main layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-x-auto overflow-y-hidden">
         
         {/* Left Panel: Info & Artifacts */}
-        <div className="w-[340px] lg:w-[420px] border-r border-border bg-sidebar flex flex-col shrink-0">
+        <div className="w-[300px] lg:w-[420px] border-r border-border bg-sidebar flex flex-col shrink-0">
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-6">
               <section>
@@ -438,7 +438,7 @@ export default function CaseRoom() {
         </div>
 
         {/* Center Panel: Reasoning Cards */}
-        <div className="flex-1 flex flex-col min-w-0 border-r border-border bg-[#0a0a0c]">
+        <div className="flex-1 flex flex-col min-w-[300px] border-r border-border bg-[#0a0a0c]">
           <div className="h-8 border-b border-border bg-card/30 flex items-center justify-between px-4 shrink-0">
             <span className="font-mono text-[10px] text-primary uppercase tracking-widest flex items-center">
               <Terminal size={12} className="mr-2" /> Reasoning Trace
