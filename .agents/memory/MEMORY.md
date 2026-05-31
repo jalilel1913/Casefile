@@ -1,1 +1,1 @@
-- [case-room typecheck quirk](case-room-typecheck.md) — case-room is outside the tsc --build graph; sample-cases.ts has 2 deliberate DO-NOT-FIX errors; embed binary fixtures as verified base64 literals.
+- [case-room typecheck quirk](case-room-typecheck.md) — case-room is outside the tsc --build graph; has 2 deliberate DO-NOT-FIX errors; embed binary fixtures as verified base64.

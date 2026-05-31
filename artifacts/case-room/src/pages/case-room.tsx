@@ -53,6 +53,7 @@ export default function CaseRoom() {
   const stream = useInvestigationStream(caseId);
 
   const [trainingMode, setTrainingMode] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<"brief" | "trace" | "report">("trace");
 
   // Feed scroll lock: only auto-follow when the user is already at the bottom.
   const feedScrollRef = useRef<HTMLDivElement>(null);
@@ -246,8 +247,8 @@ export default function CaseRoom() {
   return (
     <div className="min-h-screen h-screen bg-background text-foreground flex flex-col font-sans overflow-hidden">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 px-4 py-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-4">
+      <header className="border-b border-border bg-card/50 px-4 py-3 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
           <Link href="/">
             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
               <ArrowLeft size={16} />
@@ -260,16 +261,16 @@ export default function CaseRoom() {
               c.status === 'failed' ? 'bg-destructive' :
               'bg-muted'
             }`} />
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[10px] text-muted-foreground uppercase">{c.id.split('-')[0]}</span>
-                <h1 className="text-lg font-bold tracking-tight text-foreground">{c.title}</h1>
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2 min-w-0">
+                <span className="font-mono text-[10px] text-muted-foreground uppercase shrink-0">{c.id.split('-')[0]}</span>
+                <h1 className="text-base lg:text-lg font-bold tracking-tight text-foreground truncate">{c.title}</h1>
               </div>
               <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">{c.status}</p>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           <label
             htmlFor="training-mode-switch"
             className="flex items-center gap-2 cursor-pointer select-none px-2 py-1 rounded hover:bg-card/60 transition-colors"
@@ -318,11 +319,26 @@ export default function CaseRoom() {
         </div>
       </header>
 
+      {/* Mobile panel switcher */}
+      <div className="lg:hidden flex shrink-0 border-b border-border bg-card/30">
+        {([["brief", "Brief"], ["trace", "Trace"], ["report", "Report"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setMobilePanel(key)}
+            data-testid={`mobile-panel-${key}`}
+            className={`flex-1 py-2.5 font-mono text-[10px] uppercase tracking-widest border-b-2 transition-colors ${mobilePanel === key ? "border-primary text-primary bg-primary/[0.04]" : "border-transparent text-muted-foreground"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Main layout */}
       <div className="flex-1 flex overflow-x-auto overflow-y-hidden">
         
         {/* Left Panel: Info & Artifacts */}
-        <div className="w-[300px] lg:w-[420px] border-r border-border bg-sidebar flex flex-col shrink-0">
+        <div className={`${mobilePanel === "brief" ? "flex" : "hidden"} lg:flex w-full lg:w-[420px] border-r border-border bg-sidebar flex-col shrink-0`}>
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-6">
               <section>
@@ -438,7 +454,7 @@ export default function CaseRoom() {
         </div>
 
         {/* Center Panel: Reasoning Cards */}
-        <div className="flex-1 flex flex-col min-w-[300px] border-r border-border bg-[#0a0a0c]">
+        <div className={`${mobilePanel === "trace" ? "flex" : "hidden"} lg:flex flex-1 flex-col w-full min-w-0 lg:min-w-[300px] border-r border-border bg-[#0a0a0c]`}>
           <div className="h-8 border-b border-border bg-card/30 flex items-center justify-between px-4 shrink-0">
             <span className="font-mono text-[10px] text-primary uppercase tracking-widest flex items-center">
               <Terminal size={12} className="mr-2" /> Reasoning Trace
@@ -528,7 +544,7 @@ export default function CaseRoom() {
 
 
         {/* Right Panel: Intelligence / Report */}
-        <div className="w-[300px] lg:w-[400px] bg-sidebar flex flex-col shrink-0">
+        <div className={`${mobilePanel === "report" ? "flex" : "hidden"} lg:flex w-full lg:w-[400px] bg-sidebar flex-col shrink-0`}>
           <Tabs defaultValue="report" className="flex-1 flex flex-col">
             <div className="h-8 border-b border-border bg-card/30 flex items-center px-2 shrink-0">
                <TabsList className="h-6 bg-transparent p-0 gap-4">
