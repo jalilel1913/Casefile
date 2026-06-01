@@ -69,11 +69,11 @@ Cadence: teaching-paced, 4–5 build days per week. Buffer of ~17–21 days buil
 
 - [x] (1) MIT-licensed code repo
 - [ ] (2) Demo video
-- [x] (3) Architecture diagram — `docs/architecture.md` (Mermaid: system overview, request-path sequence, integrity layers)
-- [x] (4) Written description — `docs/description.md`
-- [x] (5) Dataset documentation — `docs/dataset.md`
-- [x] (6) Accuracy report — `docs/accuracy-report.md` (3/3 sample cases pass; reproducer in `.local/accuracy/run.mjs`)
+- [x] (3) Architecture diagram — `docs/architecture.md` (Mermaid) + uploadable `docs/architecture-diagram.svg`
+- [x] (4) Written description — `docs/description.md` (Devpost format + Built-With)
+- [x] (5) Dataset documentation — `docs/dataset.md` (all seven sample cases)
+- [x] (6) Accuracy report — `docs/accuracy-report.md` (4 cases measured w/ recorded runs, 3 documented; harness now auth-gated)
 - [x] (7) Try-it-out instructions — `README.md`
-- [ ] (8) Structured execution logs (architectural — covered by Steps 2 & 6)
+- [x] (8) Structured execution logs — `docs/execution-logs.md` + recorded runs in `docs/sample-logs/`
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

@@ -1,0 +1,20 @@
+{
+  "sampleId": "disk-image-carve",
+  "shortLabel": "Disk Image Carve",
+  "caseId": "d0428671-3358-400c-9a7b-ada18973de35",
+  "status": "complete",
+  "stopReason": "finalized",
+  "fatal": null,
+  "elapsedSec": 30.9,
+  "stepCount": 3,
+  "findingsCount": 3,
+  "selfCorrectionCount": 1,
+  "toolCalls": 11,
+  "toolErrors": 0,
+  "tokens": {
+    "prompt": 5588,
+    "completion": 1018,
+    "total": 29894
+  },
+  "hasReport": true
+}

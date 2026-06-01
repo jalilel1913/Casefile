@@ -1,0 +1,20 @@
+{
+  "sampleId": "ssh-bruteforce-breakthrough",
+  "shortLabel": "SSH Brute Force → Breach",
+  "caseId": "02cebf70-972f-4e32-bdce-6c0503a0d832",
+  "status": "complete",
+  "stopReason": "finalized",
+  "fatal": null,
+  "elapsedSec": 35.9,
+  "stepCount": 3,
+  "findingsCount": 3,
+  "selfCorrectionCount": 1,
+  "toolCalls": 9,
+  "toolErrors": 0,
+  "tokens": {
+    "prompt": 8346,
+    "completion": 1187,
+    "total": 41937
+  },
+  "hasReport": true
+}

@@ -1,0 +1,20 @@
+{
+  "sampleId": "powershell-encoded-payload",
+  "shortLabel": "Encoded PowerShell",
+  "caseId": "e008ea42-6358-4319-8bb8-1803f7fc9ab0",
+  "status": "complete",
+  "stopReason": "finalized",
+  "fatal": null,
+  "elapsedSec": 55.9,
+  "stepCount": 2,
+  "findingsCount": 2,
+  "selfCorrectionCount": 0,
+  "toolCalls": 11,
+  "toolErrors": 0,
+  "tokens": {
+    "prompt": 9269,
+    "completion": 1561,
+    "total": 41544
+  },
+  "hasReport": true
+}

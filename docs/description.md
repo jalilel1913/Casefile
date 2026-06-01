@@ -1,195 +1,221 @@
 # Casefile — Written Description
 
-## What it is
+> Devpost-style submission write-up. The five headings below map to the
+> standard Devpost prompts (Inspiration / What it does / How we built it /
+> Challenges / What we learned / What's next), followed by a Built-With
+> list.
 
-Casefile is a fully autonomous incident-response (IR) agent. A
-human uploads evidence — logs, network captures, suspicious files,
-host-context notes — into a case folder and Casefile investigates it
-end-to-end: forms hypotheses, runs forensic tools to test them, records
-its reasoning as it goes, and produces a final incident report with
-severity, IOCs, a chronological timeline, recommendations, a numeric
-confidence score, and a verifiable chain of custody.
+## Inspiration
 
-The agent runs on top of GPT-5 and a hand-built suite of six forensic
-tools. The reasoning loop, the tool catalog, and the persistence layer
-are deliberately separated so each piece is replaceable and each tool
-output is reproducible.
+Two real problems push in opposite directions, and Casefile is built to
+address both at once.
 
-## The problem
+**Senior analysts cannot scale.** The bottleneck in any blue team is the
+number of incidents a senior analyst can triage per day. Junior analysts
+learn by watching, but the watching is piecemeal — they see the final
+report, never the chain of reasoning that produced it. The learning
+curve is years long and largely tacit.
 
-Two real problems push in opposite directions, and Casefile addresses both
-at once.
+**LLM agents in security cannot be trusted on their own.** A model that
+writes confident-sounding IR conclusions without proof is worse than no
+agent at all, because it pollutes the case record with hallucinated
+indicators a human then has to disprove. The hackathon brief asked for
+an agent whose conclusions are *verifiable*, not just plausible.
 
-**1. Senior analysts cannot scale.** The bottleneck in any blue team
-is the number of incidents a senior analyst can triage per day. Junior
-analysts are forced to learn by watching, but the watching is
-piecemeal — they see the final report, not the chain of reasoning that
-produced it. As a result the learning curve is years long and largely
-tacit.
+Casefile is useful for the first problem only because it is trustworthy
+for the second.
 
-**2. LLM agents in security cannot be trusted on their own.** A
-language model that writes confident-sounding IR conclusions without
-proof is worse than no agent at all, because it pollutes the case
-record with hallucinated indicators that a human then has to disprove.
-The brief for this hackathon asked for an agent whose conclusions are
-*verifiable*, not just plausible.
+## What it does
 
-Casefile is built to be useful for the first problem only because it is
-trustworthy for the second.
+A human uploads evidence — logs, network captures, packet captures, disk
+images, host-context notes — into a case folder. Casefile then
+investigates end-to-end on its own:
 
-## Who it is for
+- forms hypotheses and picks forensic tools to test them;
+- runs those tools over the *verified* evidence bytes;
+- records each step as a structured finding (phase, rationale, what it
+  expected, what it found, what to do next);
+- self-corrects when threat-intel or a later tool contradicts an earlier
+  hypothesis;
+- produces a final incident report with severity, IOCs, a chronological
+  timeline, recommendations, a numeric confidence score, and a
+  verifiable chain of custody.
 
-- **Junior analysts**, who get to watch a senior-style reasoning loop
-  unfold one step at a time, with the rationale, expectation, and
-  found-result for each tool call exposed in the UI.
-- **SOC managers**, who get a fully auto-triaged first pass on
-  incoming cases with a confidence score and severity that they can
-  use to route work.
-- **Red/blue tabletop exercises**, where Casefile can be pointed at a
-  scenario and used as a synthetic adversary or a synthetic responder
-  for training.
+Everything streams to the browser live over Server-Sent Events, so a
+junior analyst can watch a senior-style reasoning loop unfold one tool
+call at a time. A "Chain of Custody" view shows every tool call with the
+SHA-256 of the exact bytes it read, so any conclusion can be re-derived
+from the persisted record.
 
-## How it works (technical narrative)
+Seven hand-authored sample cases ship in the UI as one-click loads,
+spanning credential attack, endpoint malware, DNS exfiltration, disk
+forensics, C2 beaconing over PCAP, ransomware-in-progress, and an
+insider data-theft scenario where the *correct* call is a policy
+judgment grounded strictly in the evidence. See
+[`dataset.md`](dataset.md).
 
-The full architecture is in [`architecture.md`](architecture.md). This
-section is the prose version of the same shape, emphasising the design
-choices that matter.
+### Who it is for
 
-The system is one Postgres-backed Fastify service with three layers:
+- **Junior analysts**, who watch the rationale/expectation/result of
+  each tool call instead of just the final verdict.
+- **SOC managers**, who get an auto-triaged first pass with a confidence
+  score and severity they can use to route work.
+- **Tabletop exercises**, where Casefile can act as a synthetic
+  responder against a scripted scenario.
 
-1. **The agent loop** (`lib/sift-agent/`) drives GPT-5 in a
-   tool-calling loop. The model is given a system prompt that defines
-   the four-beat investigation cycle (triage → deep analysis →
-   synthesis → self-correction), an enumerated tool table, and one
-   non-negotiable rule: *never claim a fact about evidence without a
-   tool-verified observation to back it up*. The loop streams every
-   reasoning step, tool call, and tool result back to the browser over
-   Server-Sent Events.
+## How we built it
 
-2. **The forensic tool suite** (`lib/sift-tools/`) is six pure
-   functions: a log parser, an IOC extractor (with Unicode-aware
-   homoglyph detection), an entropy scanner, a timeline builder, a
-   network analyser, and `mcpFetcher` — the one and only tool that
-   touches the network, used to enrich indicators against public
-   threat-intel endpoints. `mcpFetcher` has three concentric layers
-   of SSRF defence (literal-host blocking including
-   decimal/hex-encoded IPv4 and IPv6 loopback/ULA forms, DNS
-   resolution checking, and a 10s/500 KB timeout cap).
+Casefile is a pnpm monorepo with TypeScript project references. The whole
+thing is one Postgres-backed Express 5 service plus a React + Vite UI,
+organized into three layers.
 
-3. **The persistence + integrity layer** (`lib/db/`) is the part that
-   makes the agent trustworthy. It enforces three guarantees that
-   together form the "evidence integrity invariant" described below.
+**1. The agent loop (`lib/sift-agent/`).** The architectural pattern is
+a *Direct Agent Extension*: a single agent built directly on the model's
+native tool-calling. The loop drives **OpenAI gpt-5.4** (through the
+Replit AI Integrations proxy — no API key in app code) with a system
+prompt that defines a four-beat investigation cycle (triage → deep
+analysis → synthesis → self-correction), an enumerated tool table, and
+one non-negotiable rule: *never claim a fact about evidence without a
+tool-verified observation to back it up*. Every reasoning step, tool
+call, and tool result streams back to the browser over SSE.
 
-### The evidence-integrity invariant
+**2. The forensic tool suite (`lib/sift-tools/`).** Eight pure
+functions: a log parser, an IOC extractor (with Unicode-aware homoglyph
+detection), an entropy scanner, a timeline builder, a network analyzer,
+a PCAP analyzer, a disk-image analyzer (a pure-Node MBR/GPT parser that
+hashes and reads *decoded* bytes), and `mcpFetcher` — the one tool that
+touches the network. This is a *self-built, SIFT-style* toolkit; it is
+not the SANS SIFT Workstation, and "SIFT" here is an homage rather than
+a dependency.
 
-A judge reading the brief asked: *if the LLM tries to lie about what
-the evidence said, how do you catch it?* Casefile answers in three layers,
-all enforced rather than advised.
+**3. The persistence + integrity layer (`lib/db/`).** This is the part
+that makes the agent trustworthy. Postgres triggers make evidence
+immutable, every artifact read is hash-verified at runtime, and every
+tool call and finding is persisted with cryptographic provenance.
 
-**Storage immutability.** Two `BEFORE` triggers on `case_artifacts`
-(in `lib/db/src/triggers.sql`) reject any `UPDATE` that touches
-evidence content or its stored SHA-256 hash, and reject any direct
-`DELETE` that is not a cascade from the parent case row. Even a
-compromised agent process cannot tamper with the inputs it is
-reasoning about, because the application layer has no path through
-which to do so — the database refuses.
+The REST contract is an OpenAPI spec (`lib/api-spec/openapi.yaml`) from
+which the Zod schemas and React Query hooks are generated with Orval, so
+the client and server never drift.
 
-**Read-time verification.** Every tool that reads an artifact does so
-through `loadVerifiedArtifact()`, which re-hashes the bytes on each
-read and compares to the hash stored at upload time. A mismatch raises
-`ArtifactIntegrityError`, the agent yields a `SPOLIATION` event, and
-the investigation halts. The hash actually seen during the read, plus
-a hash of the tool's output, are written to `execution_logs` — so the
-chain-of-custody view in the UI can replay exactly what the agent saw,
-in order, with cryptographic proof.
+### The trust model, concretely
 
-**Reasoning provenance.** Every meaningful conclusion the agent draws
-is written as an `analysis_steps` row via the `record_finding` tool.
-The schema is structured: `phase`, `rationale`, `expected`, `found`,
-`next_step`. The agent is required to populate all five — there is no
-free-form "thought" field where it can hide. The final
-`incident_reports` row commits to a numeric confidence (0.00–1.00) and
-a 5-level severity enum (informational / low / medium / high /
-critical). The agent cannot hedge.
+Casefile separates **architectural** guardrails (enforced by code/DB/runtime
+— the agent cannot bypass them) from **prompt-based** guardrails
+(instructions a misaligned model could ignore). The full breakdown,
+including what happens when the agent *tries* to bypass each one, is in
+[`architecture.md`](architecture.md). The short version:
+
+- **Storage immutability.** `BEFORE` triggers on `case_artifacts` reject
+  any UPDATE that touches evidence content or its hash, and any direct
+  DELETE that is not a cascade from the case. A compromised agent
+  process has no path to tamper with its own inputs — the database
+  refuses.
+- **Read-time verification.** Every artifact read goes through
+  `loadVerifiedArtifact()`, which re-hashes the bytes and compares to
+  the upload-time hash. A mismatch raises a `SPOLIATION` event and halts
+  the investigation. The verified hash and a hash of the tool's output
+  are written to `execution_logs`, so the chain-of-custody view replays
+  exactly what the agent saw.
+- **No arbitrary egress.** `fetch_url` does not accept a URL. The model
+  supplies an endpoint name and an IOC value; the URL is built
+  server-side from a fixed template, the IOC is validated by kind, and
+  `mcpFetcher` applies three SSRF layers plus a timeout/size cap.
+- **Reasoning provenance.** Every conclusion is an `analysis_steps` row
+  with a five-field schema, and the final report commits to a numeric
+  confidence (0.00–1.00) and a 5-level severity enum. The agent cannot
+  hedge.
 
 ### Self-correction
 
-The fourth beat of the investigation cycle is the most important one
-for trustworthiness. When two pieces of evidence disagree — say, an
-IOC extractor flags `scanme.nmap.org` as suspicious but a `fetch_url`
-to public threat-intel returns "this is a legitimate scan target
-operated by the nmap project" — the agent is instructed to write a
-`self_correction` finding rather than picking the more convenient
-answer. In the bundled PowerShell sample case, this is exactly what
-happens: the agent's initial confidence is 0.85, then it issues a
-self-correction after the IP enrichment comes back benign, and
-finalises at 0.69. The downgrade is the right answer, and it is
-visible to the human in the UI.
+The fourth beat of the cycle is the most important for trustworthiness.
+When two pieces of evidence disagree — say, an IOC is flagged locally but
+`fetch_url` to public threat-intel returns benign — the agent is
+instructed to write a `self_correction` finding rather than pick the
+convenient answer. In the bundled PowerShell case, the agent's initial
+hypothesis rates the incident high, threat-intel comes back clean for the
+C2 IP, and the agent *tempers* its confidence instead of flipping its
+conclusion, because the local attack chain (encoded command + WINWORD
+parent + Run-key persistence + DLL drop) still stands. The downgrade is
+the right answer, and it is visible to the human in the UI.
 
-The bundled accuracy report (`docs/accuracy-report.md`) verifies that
-all three sample cases produce at least one self-correction finding
-and terminate with `stop_reason=finalized` (the agent voluntarily
-called `finalize`, not truncated by a max-iteration guard).
+## Challenges we ran into
 
-## What is novel
+- **Making integrity enforced, not advisory.** An application-layer
+  immutability check is one stray code path away from being bypassed. We
+  moved the guarantee into Postgres `BEFORE` triggers so it holds
+  regardless of what the application (or the agent) tries.
+- **Stopping the agent from constructing its own URLs.** An early version
+  let the model pass a full URL to the fetch tool — a textbook SSRF
+  surface. We re-architected `fetch_url` so the model only names an
+  endpoint and supplies an IOC, and the server owns URL construction.
+- **Binary evidence.** Disk images forced the hashing and IOC paths to
+  operate over *decoded* bytes (base64 on the wire, hashed after decode)
+  so a stored `sha256Hash` matches what `sha256sum` prints on the
+  original file.
+- **Homoglyph IOCs.** The Cyrillic-lookalike sender domain in the
+  PowerShell case originally truncated in the extractor; the domain regex
+  was rewritten with Unicode property classes and a `suspiciousDomains`
+  signal for ASCII/non-ASCII label mixing.
+- **Schema ergonomics.** The model liked to pass `null` for optional tool
+  fields; the Zod schemas were switched to `.nullish()` so those shapes
+  flow through instead of costing a recovery iteration.
 
-- **Database-enforced evidence immutability.** Most agent frameworks
-  treat artifact integrity as an application-layer convention. Casefile
-  treats it as a database constraint. A new contributor who writes a
-  code path that tries to mutate `case_artifacts.content` gets an
-  exception from Postgres, not a code review comment.
-- **Hashed tool I/O on every call.** Every `execution_logs` row stores
-  both the verified hash of the artifact read and a hash of the tool's
-  output. The chain-of-custody view is not a log — it is a replayable
-  proof.
-- **Structured reasoning, not freeform thought.** `analysis_steps`
-  forces the agent into a five-field schema. Findings cannot be
-  ambiguous, hedged, or absent.
-- **Severity + confidence are both required.** The agent has to commit
-  to a number and a level. There is no "the situation is concerning"
-  escape hatch.
-- **One network tool, three SSRF layers.** Threat-intel enrichment is
-  table-stakes for an IR agent and is also the single largest
-  potential blast radius. Concentrating egress into one Zod-validated,
-  SSRF-hardened function keeps the audit surface tiny.
+## What we learned
 
-## What has been measured
+- **Trust is an architecture problem, not a prompt problem.** The
+  controls that actually held under test were the ones the model could
+  not route around. Prompt rules shape behavior; they do not guarantee
+  it. Naming that distinction explicitly changed how we built every
+  feature.
+- **Structured reasoning beats freeform "thoughts."** Forcing every
+  conclusion into a five-field schema made the agent auditable and made
+  the training-mode UI possible — you can count and inspect every
+  revision.
+- **Reproducibility is a design constraint.** Keeping the tools pure and
+  local means a judge can re-run a tool on the same bytes and get
+  identical output, which is what a forensic finding requires.
 
-Three bundled sample cases (SSH brute-force with breakthrough, encoded
-PowerShell from a Word macro, DNS-tunnel data exfiltration) are run
-end-to-end through the production code path — real LLM, real tools,
-real database writes, real integrity triggers, no mocks — by
-`.local/accuracy/run.mjs`. The accuracy report
-(`docs/accuracy-report.md`) records: status, step count, finding
-count, self-correction count, tool calls, tool errors, token usage,
-wall time, and confidence per case.
+## What's next
 
-Current numbers (post-fixes):
+- A larger, adversarial benchmark (30+ cases, including planted
+  distractors and "this is a false positive / insufficient evidence"
+  cases) with a machine-checkable ground-truth schema so the harness can
+  self-score instead of relying on human review.
+- A dev-mode auth path for the accuracy harness so all seven cases re-run
+  unattended (the harness currently sits behind the same auth gate as the
+  production API — see [`accuracy-report.md`](accuracy-report.md)).
+- Optional human-in-the-loop checkpoints before high-severity finalize.
 
-| Case | Status | Tool Errors | Self-Corrections | Severity | Confidence | Wall Time |
-| --- | --- | --- | --- | --- | --- | --- |
-| SSH Brute Force → Breach | complete | 0 | 1 | high | 0.95 | 38 s |
-| Encoded PowerShell | complete | 0 | 1 | medium | 0.69 | 56 s |
-| DNS Data Exfiltration | complete | 0 | 1 | high | 0.84 | 32 s |
+## Built with
 
-All three terminate with `stop_reason=finalized`. All three produce at
-least one self-correction. Zero tool errors across all three. The
-PowerShell case correctly downgrades its own confidence after
-enrichment contradicts its initial hypothesis, demonstrating the
-self-correction loop is real rather than ceremonial.
+- **Language / runtime:** TypeScript 5.9, Node.js 24
+- **AI:** OpenAI **gpt-5.4** via the Replit AI Integrations proxy
+- **Backend:** Express 5, Server-Sent Events
+- **Database:** PostgreSQL, Drizzle ORM, SQL triggers
+- **Validation / contract:** Zod (`zod/v4`), OpenAPI, Orval codegen
+- **Frontend:** React, Vite, wouter, TanStack Query
+- **Auth:** Replit Auth (OIDC)
+- **Tooling / infra:** pnpm workspaces, esbuild, Replit (AI Integrations,
+  Auth, Deployments)
+- **Forensics:** a self-built, SIFT-style forensic toolkit (log/IOC/
+  entropy/timeline/network/PCAP/disk-image analysis) — *not* the SANS
+  SIFT Workstation
+
+> Honesty notes for judges: the `mcpFetcher` / `mcp_endpoint` names are
+> internal labels — Casefile does not use the Model Context Protocol. The
+> forensic suite is original code inspired by SIFT, not the SANS
+> distribution.
 
 ## What this is not
 
-- It is not an EDR or a SIEM. It does not collect telemetry — a human
-  collects the evidence and uploads it.
-- It is not a replacement for a senior analyst. It is a faster,
-  cheaper, more patient first-pass triage that produces audit-trail
-  artifacts a senior analyst can use.
-- It does not write back to production systems. There is no
-  containment action, no firewall rule, no AD lockout. It produces
-  recommendations; a human acts on them.
+- Not an EDR or SIEM. It does not collect telemetry — a human collects
+  and uploads the evidence.
+- Not a replacement for a senior analyst. It is a faster, more patient
+  first-pass triage that produces audit-trail artifacts a senior can use.
+- It does not write back to production systems. No containment action, no
+  firewall rule, no AD lockout. It recommends; a human acts.
 
 ## Try it out
 
-See [`../README.md`](../README.md) for setup, sample cases, and a
-suggested walkthrough.
+See [`../README.md`](../README.md) for setup, the seven sample cases, and
+a suggested walkthrough.

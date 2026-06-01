@@ -1,14 +1,35 @@
 # Casefile — Architecture
 
 Casefile is an autonomous incident-response agent. A human uploads
-evidence (logs, network captures, suspicious files) into a case folder
-and the system investigates end-to-end: forms hypotheses, runs forensic
-tools, records findings as it goes, and produces a final incident report
-with a verifiable chain of custody.
+evidence (logs, network captures, disk images, suspicious files) into a
+case folder and the system investigates end-to-end: forms hypotheses,
+runs forensic tools, records findings as it goes, and produces a final
+incident report with a verifiable chain of custody.
 
 This document is the architecture map a judge or new contributor should
-read first. It covers the request path, the evidence-integrity model,
-and the file:function landmarks for every meaningful step.
+read first. It covers the architectural pattern, the request path, the
+guardrail model (prompt-based vs. architectural), the evidence-integrity
+layers, and the file:function landmarks for every meaningful step.
+
+A standalone, uploadable rendering of the system diagram lives at
+[`architecture-diagram.svg`](architecture-diagram.svg).
+
+## Architectural pattern: Direct Agent Extension
+
+Casefile is a **single agent built directly on the model's native
+tool-calling**, driven in a persistent reasoning loop. It is not a
+multi-agent system, not an MCP-server integration, and not a wrapper
+around an agentic IDE. The loop in `lib/sift-agent/src/agent.ts` calls
+`chat.completions.create` with a fixed tool catalog, dispatches the
+returned `tool_calls`, appends the results to the running message
+history, and repeats until the model voluntarily calls `finalize` or a
+bounded iteration limit trips.
+
+Naming caveat (kept honest for the judges): the network-fetch tool is
+called `mcpFetcher` and one artifact kind is `mcp_endpoint`, but Casefile
+does **not** speak the Model Context Protocol. Those names are internal
+labels that predate the final design; there is no external MCP server in
+the loop.
 
 ## System overview
 
@@ -19,14 +40,14 @@ flowchart TB
     end
 
     subgraph Server["Replit container"]
-        API["API Server (Fastify)<br/>artifacts/api-server"]
-        Agent["Casefile Agent (reasoning loop)<br/>lib/sift-agent"]
+        API["API Server (Express 5)<br/>artifacts/api-server"]
+        Agent["Casefile Agent (persistent reasoning loop)<br/>lib/sift-agent"]
         Tools["Forensic tools (pure functions)<br/>lib/sift-tools"]
         DB[("Postgres<br/>lib/db<br/>+ integrity triggers")]
     end
 
-    LLM["OpenAI GPT-5<br/>(via Replit AI proxy)"]
-    Intel["Public threat-intel<br/>(AlienVault OTX, ipinfo.io, …)"]
+    LLM["OpenAI gpt-5.4<br/>(via Replit AI proxy)"]
+    Intel["Public threat-intel<br/>(ipinfo.io, ipapi.co, AlienVault OTX)"]
 
     UI -- "REST: create case,<br/>upload artifacts" --> API
     UI -- "SSE: live investigation stream" --> API
@@ -34,7 +55,7 @@ flowchart TB
     Agent -- "chat.completions.create<br/>(with tool definitions)" --> LLM
     LLM -- "tool_calls" --> Agent
     Agent -- "dispatchToolCall()" --> Tools
-    Tools -- "mcpFetcher only<br/>(SSRF-gated)" --> Intel
+    Tools -- "mcpFetcher only<br/>(fixed templates + SSRF-gated)" --> Intel
     Agent <-- "verified artifact reads<br/>+ execution_logs writes<br/>+ analysis_steps writes<br/>+ incident_reports writes" --> DB
     API <-- "case + report reads" --> DB
 ```
@@ -53,7 +74,7 @@ sequenceDiagram
     participant R as Tool runner<br/>(tool-runner.ts)
     participant T as Forensic tool<br/>(sift-tools)
     participant DB as Postgres<br/>(integrity triggers)
-    participant L as OpenAI GPT-5
+    participant L as OpenAI gpt-5.4
 
     U->>A: POST /investigate (open SSE)
     A->>G: runInvestigation({ caseId })
@@ -63,7 +84,7 @@ sequenceDiagram
         G-->>A: stream "thought", "tool_call" events
         A-->>U: SSE: event:tool_call
 
-        alt artifact-bound tool (parse_log, extract_iocs, scan_entropy)
+        alt artifact-bound tool (parse_log, extract_iocs, scan_entropy, analyze_disk_image, analyze_pcap)
             G->>D: dispatchToolCall
             D->>R: runToolOnArtifact(caseId, artifactId, toolName)
             R->>DB: loadVerifiedArtifact(artifactId)
@@ -99,18 +120,84 @@ sequenceDiagram
 | HTTP entry + SSE writer | `artifacts/api-server/src/routes/investigate.ts` | `router.post("/cases/:caseId/investigate")` |
 | Agent loop driver | `lib/sift-agent/src/agent.ts` | `runInvestigation` |
 | LLM tool-call dispatch | `lib/sift-agent/src/tool-adapter.ts` | `dispatchToolCall` |
+| `fetch_url` template resolution | `lib/sift-agent/src/tool-adapter.ts` | endpoint-template table (server-side URL build) |
 | Artifact tool wrapper | `lib/sift-agent/src/tool-runner.ts` | `runToolOnArtifact` |
 | Structured tool wrapper | `lib/sift-agent/src/tool-runner.ts` | `runTool` |
-| Forensic tool table | `lib/sift-tools/src/index.ts` | `invokeTool` |
+| Forensic tool table | `lib/sift-tools/src/index.ts` | `invokeTool` / `TOOL_REGISTRY` |
 | Hash re-verification | `lib/db/src/integrity.ts` | `loadVerifiedArtifact` |
 | Finding write | `lib/sift-agent/src/tool-adapter.ts` | `dispatchRecordFinding` |
 | Final report write | `lib/sift-agent/src/tool-adapter.ts` | `dispatchFinalize` |
 | Immutability triggers | `lib/db/src/triggers.sql` | `sift_reject_artifact_mutation` |
 
-## Evidence-integrity model
+## Guardrails: prompt-based vs. architectural
 
-The brief asks for an agent whose conclusions can be trusted. Casefile
-treats that as three concentric layers, all enforced — not advisory.
+The brief asks for an agent whose conclusions can be *trusted*. Casefile
+draws a hard line between two kinds of control, because they offer very
+different guarantees.
+
+**Prompt-based guardrails** are instructions in the system prompt. They
+shape behavior but a misaligned or jailbroken model could in principle
+ignore them:
+
+- "Never claim a fact about evidence without a tool-verified
+  observation to back it up."
+- The four-beat investigation cycle (triage → deep analysis →
+  synthesis → self-correction).
+- "If external enrichment contradicts your hypothesis, surface the
+  contradiction; do not silently drop it."
+- Conclusions must be strictly evidence-based (e.g., the insider-threat
+  case is engineered so the policy-violation reading is only defensible
+  from what the artifacts actually show).
+- `finalize` must commit to a severity level and a numeric confidence.
+
+**Architectural guardrails** are enforced by code, the database, or the
+runtime. The agent cannot bypass them regardless of what it "decides":
+
+- **Storage immutability** — Postgres `BEFORE UPDATE`/`BEFORE DELETE`
+  triggers on `case_artifacts` reject any mutation of evidence content
+  or its stored hash.
+- **Read-time verification** — `loadVerifiedArtifact` re-hashes the
+  bytes on every read; a mismatch raises `ArtifactIntegrityError`,
+  emits a `SPOLIATION` event, and halts the run.
+- **Tamper-evident audit trail** — every `execution_logs` row persists
+  the `verified_hash` of the artifact read and the `output_hash`
+  returned to the model.
+- **Typed tool allow-list** — the agent has only the typed forensic
+  functions in the registry. There is no shell tool, no file-write
+  tool, no arbitrary-code tool, and no DB write path to evidence.
+- **`fetch_url` cannot construct arbitrary URLs** — the model supplies
+  an *endpoint name* and an *IOC value*; the actual URL is built
+  server-side from a fixed template, and the IOC is validated against
+  the endpoint's expected kind (e.g., an `ip` endpoint refuses anything
+  that is not a well-formed IP). `mcpFetcher` then applies three SSRF
+  layers plus a timeout/size cap.
+- **Bounded loop** — the reasoning loop has an iteration limit, so it
+  cannot run unbounded.
+- **Auth + ownership** — every case endpoint is gated by Replit Auth and
+  a per-case ownership check.
+
+### What happens when the agent tries to bypass them
+
+This is the property the brief actually cares about, so it is worth
+spelling out:
+
+- *Tries to alter or delete evidence:* no tool exists to do so, and even
+  a direct DB write is rejected by the triggers. Nothing changes.
+- *Evidence is altered out-of-band:* the next `loadVerifiedArtifact`
+  recomputes the hash, detects the mismatch, emits `SPOLIATION`, and
+  stops — the agent never reasons over tampered bytes.
+- *Tries to reach an internal or attacker-controlled URL via
+  `fetch_url`:* the fixed-template + IOC-kind + SSRF layers reject it; a
+  free-form URL is not even expressible through the tool surface.
+- *Fabricates a finding with no supporting observation:* the finding is
+  still written (prose grounding is prompt-based, not enforced), **but**
+  every tool read is independently logged with hashes, so the
+  chain-of-custody view exposes that no supporting observation exists.
+  The architectural controls protect the *evidence* and the *audit
+  trail*; they make an unsupported claim visible rather than silently
+  preventing the model from writing prose.
+
+## Evidence-integrity model
 
 ```mermaid
 flowchart LR
@@ -160,30 +247,38 @@ way out of being judged.
 
 All tools live in `lib/sift-tools/src/` and follow the same
 `ToolDescriptor<Input, Output>` shape: a Zod input schema, a Zod output
-schema, and a pure `run()` function. Only `mcpFetcher` touches the
-network; everything else is pure-local.
+schema, and a pure `run()` function. They are a **self-built,
+SIFT-style** suite — they are *not* the SANS SIFT Workstation, and the
+name is an homage, not a dependency. Only `mcpFetcher` touches the
+network; everything else is pure-local and reproducible.
 
 | Tool | Purpose | Network? |
 | --- | --- | --- |
-| `logParser` | Parses syslog / auth.log / generic event lines into structured rows | no |
-| `iocExtractor` | Sweeps text for IPs, domains (incl. IDN/homoglyph), URLs, emails, hashes, CVEs, file paths | no |
+| `logParser` | Parses syslog / auth.log / Sysmon / generic event lines into structured rows | no |
+| `iocExtractor` | Sweeps text for IPs, domains (incl. IDN/homoglyph via `suspiciousDomains`), URLs, emails, hashes, CVEs, file paths | no |
 | `entropyScanner` | Shannon entropy of an artifact — flags encrypted/packed payloads | no |
 | `timelineBuilder` | Sorts events chronologically, detects bursts and gaps | no |
-| `networkAnalyzer` | Summarises a connection list, flags suspicious ports / unique IPs | no |
-| `mcpFetcher` | Fetches a public HTTP(S) URL for threat-intel enrichment | **yes** |
+| `networkAnalyzer` | Summarises a connection list, flags suspicious ports / unique IPs / beaconing | no |
+| `pcapAnalyzer` | Parses packet-capture summaries — flags periodic C2 beacons, jitter, byte volume | no |
+| `diskImageAnalyzer` | Pure-Node MBR/GPT parser, filesystem-signature detector, printable-string + embedded-indicator harvester (over decoded bytes) | no |
+| `mcpFetcher` | Fetches a public HTTP(S) threat-intel URL, built from a fixed server-side template | **yes** |
+
+The agent exposes eleven tool names to the model: the eight forensic
+tools above plus `list_artifacts`, `record_finding`, and `finalize`.
 
 `mcpFetcher` is defended against SSRF at three levels: literal host
-checks (blocks loopback / RFC1918 / link-local / ULA, including
-decimal-encoded and hex-encoded IPv4 and IPv6 loopback/ULA forms), DNS
-resolution checks (refuses any name that resolves to a private /
-loopback / CGNAT / multicast address), and a 10s timeout plus
-~500 KB response cap.
+checks (blocks loopback / RFC1918 / link-local / ULA / CGNAT, including
+decimal-encoded and hex-encoded IPv4 and IPv6 forms), DNS resolution
+checks (refuses any name that resolves to a private / loopback / CGNAT /
+multicast address), and a 10s timeout plus ~500 KB response cap. It is
+only ever reached through the fixed-template `fetch_url` adapter, so the
+model never hands it a raw URL.
 
 ## Package layout
 
 ```
 artifacts/
-  api-server/        Fastify HTTP + SSE entry point (REST contract in lib/api-spec)
+  api-server/        Express 5 HTTP + SSE entry point (REST contract in lib/api-spec)
   case-room/         React + Vite UI — live investigation timeline, evidence locker,
                      chain-of-custody view, IR report renderer
   mockup-sandbox/    Internal-only design preview environment (not shipped)
@@ -213,9 +308,10 @@ the agent and `db`. The UI depends on `api-client-react` and
   contributor who writes a new code path. A trigger cannot.
 - **The agent's reasoning is a first-class table.** `analysis_steps` is
   not a log — it is the chain of thought, structured. The UI renders
-  it directly, and the accuracy report
-  (`docs/accuracy-report.md`) scores against it.
-- **One network tool, three SSRF layers.** Threat-intel enrichment is
-  table-stakes for an IR agent, but it is also the single biggest
-  blast radius. Concentrating all egress into one Zod-validated,
-  SSRF-hardened function keeps the audit surface tiny.
+  it directly, and the accuracy report (`docs/accuracy-report.md`)
+  scores against it.
+- **Egress is one tool, one template, three SSRF layers.** Threat-intel
+  enrichment is table-stakes for an IR agent, but it is also the single
+  biggest blast radius. Concentrating all egress into one
+  fixed-template, Zod-validated, SSRF-hardened function keeps the audit
+  surface tiny.

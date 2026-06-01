@@ -1,0 +1,20 @@
+{
+  "sampleId": "dns-data-exfiltration",
+  "shortLabel": "DNS Data Exfiltration",
+  "caseId": "41cca34b-2246-4e32-84c8-b68b8f500615",
+  "status": "complete",
+  "stopReason": "finalized",
+  "fatal": null,
+  "elapsedSec": 32.2,
+  "stepCount": 3,
+  "findingsCount": 3,
+  "selfCorrectionCount": 1,
+  "toolCalls": 11,
+  "toolErrors": 0,
+  "tokens": {
+    "prompt": 7331,
+    "completion": 1175,
+    "total": 25267
+  },
+  "hasReport": true
+}

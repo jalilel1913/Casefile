@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="880" viewBox="0 0 1180 880" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { font-size: 26px; font-weight: 700; fill: #0f172a; }
+      .subtitle { font-size: 14px; fill: #475569; }
+      .zone { font-size: 13px; font-weight: 700; fill: #64748b; letter-spacing: .08em; }
+      .box-title { font-size: 15px; font-weight: 700; fill: #0f172a; }
+      .box-sub { font-size: 12px; fill: #475569; }
+      .edge { stroke: #475569; stroke-width: 1.6; fill: none; }
+      .edge-label { font-size: 11px; fill: #475569; }
+      .pill { font-size: 12px; font-weight: 700; }
+      .legend { font-size: 12px; fill: #334155; }
+    </style>
+  </defs>
+
+  <rect width="1180" height="880" fill="#f8fafc"/>
+  <text x="40" y="48" class="title">Casefile — Autonomous Incident-Response Agent</text>
+  <text x="40" y="72" class="subtitle">Architectural pattern: Direct Agent Extension — a single agent on the model's native tool-calling, driven in a persistent reasoning loop.</text>
+
+  <!-- Browser zone -->
+  <rect x="40" y="100" width="280" height="150" rx="12" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="56" y="124" class="zone">BROWSER</text>
+  <rect x="60" y="138" width="240" height="92" rx="10" fill="#ffffff" stroke="#a5b4fc"/>
+  <text x="80" y="166" class="box-title">Case Room</text>
+  <text x="80" y="186" class="box-sub">React + Vite + wouter</text>
+  <text x="80" y="204" class="box-sub">Live timeline · evidence locker</text>
+  <text x="80" y="220" class="box-sub">chain-of-custody · IR report</text>
+
+  <!-- Server zone -->
+  <rect x="40" y="290" width="800" height="540" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="56" y="314" class="zone">REPLIT CONTAINER</text>
+
+  <!-- API server -->
+  <rect x="60" y="330" width="320" height="110" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="80" y="358" class="box-title">API Server — Express 5</text>
+  <text x="80" y="378" class="box-sub">artifacts/api-server</text>
+  <text x="80" y="396" class="box-sub">REST (cases, artifacts) + SSE stream</text>
+  <text x="80" y="414" class="box-sub">Replit Auth (OIDC) · per-case ownership</text>
+  <text x="80" y="430" class="box-sub">contract: lib/api-spec (OpenAPI → Orval)</text>
+
+  <!-- Agent loop -->
+  <rect x="60" y="460" width="320" height="150" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="80" y="488" class="box-title">Casefile Agent — persistent loop</text>
+  <text x="80" y="508" class="box-sub">lib/sift-agent</text>
+  <text x="80" y="526" class="box-sub">triage → deep analysis → synthesis</text>
+  <text x="80" y="542" class="box-sub">→ self-correction → finalize</text>
+  <text x="80" y="562" class="box-sub">runInvestigation() · dispatchToolCall()</text>
+  <text x="80" y="580" class="box-sub">streams thought/tool_call/finding events</text>
+  <text x="80" y="598" class="box-sub">bounded by iteration limit</text>
+
+  <!-- Tools -->
+  <rect x="60" y="630" width="320" height="180" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="80" y="658" class="box-title">Forensic tools (pure functions)</text>
+  <text x="80" y="678" class="box-sub">lib/sift-tools — self-built "SIFT-style" suite</text>
+  <text x="80" y="696" class="box-sub">(NOT the SANS SIFT Workstation)</text>
+  <text x="80" y="716" class="box-sub">logParser · iocExtractor · entropyScanner</text>
+  <text x="80" y="732" class="box-sub">timelineBuilder · networkAnalyzer</text>
+  <text x="80" y="748" class="box-sub">pcapAnalyzer · diskImageAnalyzer</text>
+  <text x="80" y="764" class="box-sub">mcpFetcher (only tool that egresses)</text>
+  <text x="80" y="788" class="box-sub">all pure / reproducible · no DB writes</text>
+
+  <!-- Postgres -->
+  <rect x="420" y="460" width="400" height="150" rx="10" fill="#fef9c3" stroke="#fde047"/>
+  <text x="440" y="488" class="box-title">PostgreSQL + Drizzle — lib/db</text>
+  <text x="440" y="510" class="box-sub">case_artifacts (evidence, SHA-256 at write)</text>
+  <text x="440" y="528" class="box-sub">analysis_steps (structured reasoning)</text>
+  <text x="440" y="546" class="box-sub">execution_logs (verified_hash + output_hash)</text>
+  <text x="440" y="564" class="box-sub">incident_reports (severity + confidence)</text>
+  <text x="440" y="586" class="box-sub">BEFORE UPDATE/DELETE triggers on evidence</text>
+  <text x="440" y="602" class="box-sub">loadVerifiedArtifact re-hashes every read</text>
+
+  <!-- Output pipeline -->
+  <rect x="420" y="630" width="400" height="100" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="440" y="658" class="box-title">Output pipeline</text>
+  <text x="440" y="678" class="box-sub">SSE live stream → Case Room timeline</text>
+  <text x="440" y="696" class="box-sub">finalize → incident_reports → IR report view</text>
+  <text x="440" y="714" class="box-sub">execution_logs → chain-of-custody (replayable)</text>
+
+  <!-- External -->
+  <rect x="900" y="330" width="240" height="110" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="920" y="358" class="box-title">OpenAI gpt-5.4</text>
+  <text x="920" y="378" class="box-sub">chat.completions + tool defs</text>
+  <text x="920" y="396" class="box-sub">via Replit AI Integrations proxy</text>
+  <text x="920" y="414" class="box-sub">(no API key in app code)</text>
+
+  <rect x="900" y="630" width="240" height="100" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="920" y="658" class="box-title">Public threat-intel</text>
+  <text x="920" y="678" class="box-sub">ipinfo.io · ipapi.co ·</text>
+  <text x="920" y="696" class="box-sub">AlienVault OTX (fixed templates)</text>
+  <text x="920" y="714" class="box-sub">reached only via mcpFetcher</text>
+
+  <!-- Edges -->
+  <line x1="200" y1="250" x2="200" y2="330" class="edge" marker-end="url(#arrow)"/>
+  <text x="210" y="285" class="edge-label">REST + SSE</text>
+
+  <line x1="220" y1="440" x2="220" y2="460" class="edge" marker-end="url(#arrow)"/>
+  <text x="230" y="454" class="edge-label">runInvestigation()</text>
+
+  <line x1="380" y1="500" x2="900" y2="390" class="edge" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="560" y="436" class="edge-label">tool_calls ⇄ assistant messages</text>
+
+  <line x1="220" y1="610" x2="220" y2="630" class="edge" marker-end="url(#arrow)"/>
+  <text x="230" y="624" class="edge-label">dispatchToolCall()</text>
+
+  <line x1="380" y1="540" x2="420" y2="540" class="edge" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <line x1="380" y1="700" x2="420" y2="680" class="edge" marker-end="url(#arrow)"/>
+  <text x="384" y="666" class="edge-label">verified reads + log writes</text>
+
+  <line x1="380" y1="740" x2="900" y2="690" class="edge" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="560" y="724" class="edge-label">mcpFetcher only · SSRF-gated</text>
+
+  <line x1="380" y1="390" x2="320" y2="390" class="edge" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+
+  <!-- Guardrail legend -->
+  <rect x="40" y="100" width="0" height="0"/>
+  <g transform="translate(880,100)">
+    <rect x="0" y="0" width="260" height="200" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="16" y="26" class="box-title">Guardrails</text>
+    <rect x="16" y="40" width="14" height="14" rx="3" fill="#fde047" stroke="#eab308"/>
+    <text x="38" y="52" class="pill" fill="#854d0e">Architectural (enforced)</text>
+    <text x="16" y="72" class="legend">DB immutability triggers</text>
+    <text x="16" y="90" class="legend">read-time hash re-verification</text>
+    <text x="16" y="108" class="legend">typed tool allow-list (no shell)</text>
+    <text x="16" y="126" class="legend">fixed-template fetch_url + SSRF</text>
+    <rect x="16" y="140" width="14" height="14" rx="3" fill="#dbeafe" stroke="#60a5fa"/>
+    <text x="38" y="152" class="pill" fill="#1e3a8a">Prompt-based (advisory)</text>
+    <text x="16" y="172" class="legend">evidence-grounding rule</text>
+    <text x="16" y="190" class="legend">four-beat cycle · surface conflicts</text>
+  </g>
+</svg>
