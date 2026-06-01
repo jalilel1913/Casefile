@@ -1,0 +1,35 @@
+Final reminder
+
+1. Code Repository Include a URL to your open source code repository (GitHub, public or private with judge access). Must include a README with setup instructions and an open-source license (MIT or Apache 2.0).
+
+ 
+
+2. Demo Video Include the video link to your demonstration (5 min max). Screencast of live terminal execution with audio narration. Show the agent working against real case data, including at least one self-correction sequence. Upload to YouTube or Vimeo at least 48 hours before the deadline to catch rendering issues.
+
+ 
+
+3. Architecture Diagram Include an architecture diagram showing how components connect: the agent, SIFT Workstation tools, MCP servers, data sources, output pipeline. Must identify which architectural pattern you're using (Direct Agent Extension, Custom MCP Server, Multi-Agent Framework, or Alternative Agentic IDE) and distinguish between prompt-based and architectural guardrails. Upload as an image or PDF.
+
+ 
+
+4. Written Project Description Use the Devpost project story format: What it does, How you built it, Challenges, What you learned, What's next. Be specific about design decisions, tradeoffs, and which qualities of autonomous execution your submission addresses.
+
+ 
+
+5. Dataset Documentation Include documentation of what the agent was tested against, source of data, and what the agent found. Reproducibility starts here.
+
+ 
+
+6. Accuracy Report Include a self-assessment of findings accuracy: false positives, missed artifacts, hallucinated claims. Must include a section documenting your evidence integrity approach --- how your architecture prevents original data from being modified and what happens when the agent attempts to bypass those protections. Honesty valued over perfection.
+
+ 
+
+7. Try-It-Out Instructions Include either a live deployment URL or step-by-step instructions that let judges run your agent locally against provided data. If local setup requires specific tools or dependencies, document them clearly.
+
+ 
+
+8. Agent Execution Logs Include structured logs showing the full agent communication and tool execution sequence. For multi-agent submissions: agent-to-agent message logs with timestamps. For single-agent submissions: tool execution logs with timestamps and token usage. For persistent loop submissions: iteration-over-iteration traces showing how the agent's approach changed.
+
+ 
+
+Built-With Tags Tag every technology, API, and tool used in your Devpost Built-With section. At minimum: Claude Code or OpenClaw (or your primary framework), SIFT Workstation, and any MCP servers, multi-agent frameworks, or additional tools. Include architectural pattern tags where applicable: AutoGen, CrewAI, LangGraph, FastMCP, Cursor, Cline, Aider.
