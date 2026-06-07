@@ -12,3 +12,9 @@ id = "r7aE1-9Z4HT8of-foV07q"
 uri = "file://docs/architecture-diagram.svg"
 type = "image"
 title = "Casefile architecture diagram (cleaned)"
+
+[[outputs]]
+id = "zzH3Br82oTOdzTuDbPQPD"
+uri = "file://docs/demo-video-plan.md"
+type = "text"
+title = "Casefile demo video plan (OBS Studio)"
