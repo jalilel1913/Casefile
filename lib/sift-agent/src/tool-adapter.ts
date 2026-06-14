@@ -5,11 +5,16 @@ import {
   incidentReportsTable,
 } from "@workspace/db";
 import type { ToolName } from "@workspace/sift-tools";
+import {
+  isRemoteMcp,
+  listSiftTools,
+  type DiscoveredTool,
+} from "@workspace/sift-mcp";
 import { and, desc, eq } from "drizzle-orm";
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import { runTool, runToolOnArtifact, type ToolRunResult } from "./tool-runner.js";
+import { runRemoteTool, runTool, runToolOnArtifact } from "./tool-runner.js";
 
 // ---------- LLM-facing tool argument schemas ----------
 
@@ -374,7 +379,21 @@ const TOOLS: AgentToolDef[] = [
   },
 ];
 
-export function buildOpenAiTools(): ChatCompletionTool[] {
+// Underlying sift-tool names the static catalog already wraps. A remote MCP
+// server that advertises one of these is offering the same capability the agent
+// already exposes (via parse_log, extract_iocs, ...), so it is not surfaced a
+// second time as a generic remote tool — only genuinely new Workstation tools
+// are.
+const STATIC_UNDERLYING: Set<string> = new Set(
+  TOOLS.map((t) => t.underlyingTool).filter((x): x is ToolName => !!x),
+);
+
+// Remote-only tools discovered over MCP tools/list on the most recent
+// buildOpenAiTools() call. dispatchToolCall consults this to route a tool the
+// model invoked that has no static wrapper.
+const remoteToolDefs = new Map<string, DiscoveredTool>();
+
+function staticOpenAiTools(): ChatCompletionTool[] {
   return TOOLS.map((t) => ({
     type: "function",
     function: {
@@ -386,6 +405,52 @@ export function buildOpenAiTools(): ChatCompletionTool[] {
       strict: false,
     },
   }));
+}
+
+/**
+ * Build the tool catalog exposed to the model. Always includes the agent's
+ * static tools. When a remote SIFT MCP server is configured, the agent also
+ * asks it (over `tools/list`) what it can do and exposes any *additional* tools
+ * — capabilities a real Workstation has that the local catalog does not — so
+ * they are genuinely callable by the model rather than renamed stand-ins.
+ *
+ * Remote discovery is best-effort: if the server is unreachable, the agent
+ * falls back to its static catalog rather than failing the investigation.
+ */
+export async function buildOpenAiTools(): Promise<ChatCompletionTool[]> {
+  remoteToolDefs.clear();
+  const base = staticOpenAiTools();
+  if (!isRemoteMcp()) return base;
+
+  let discovered: DiscoveredTool[];
+  try {
+    discovered = await listSiftTools();
+  } catch {
+    return base;
+  }
+
+  const staticNames = new Set(TOOLS.map((t) => t.name as string));
+  const remoteTools: ChatCompletionTool[] = [];
+  for (const tool of discovered) {
+    // Skip anything the static catalog already covers, by either the
+    // agent-facing name or the underlying sift-tool name.
+    if (STATIC_UNDERLYING.has(tool.name) || staticNames.has(tool.name)) {
+      continue;
+    }
+    remoteToolDefs.set(tool.name, tool);
+    remoteTools.push({
+      type: "function",
+      function: {
+        name: tool.name,
+        description:
+          (tool.description ?? `Remote SIFT Workstation tool '${tool.name}'.`) +
+          " (Executes on the remote SIFT Workstation over MCP.)",
+        parameters: tool.inputSchema,
+        strict: false,
+      },
+    });
+  }
+  return [...base, ...remoteTools];
 }
 
 // ---------- Dispatch result ----------
