@@ -13,8 +13,12 @@ Every tool call and every finding is persisted, not just streamed:
 - `execution_logs` — one row per tool call, with the tool name, the
   `verified_hash` of the artifact bytes the tool actually read, the
   `output_hash` of what was returned to the model, an `ok` flag, and the
-  timing. This is what the Case Room's **Chain of Custody** view renders,
-  and it is what makes any conclusion replayable.
+  timing. The logged `input` also records the serving MCP endpoint
+  (`mcpEndpoint` — `in-process` or the remote URL) and, for
+  artifact-backed tools, the `evidenceMode` (`inline` or `reference`) used
+  to pass the verified bytes; remote-only discovered-tool calls are flagged
+  `remote: true`. This is what the Case Room's **Chain of Custody** view
+  renders, and it is what makes any conclusion replayable.
 - `analysis_steps` — one row per finding, with the structured
   `(phase, rationale, expected, found, next_step)` schema written through
   the `record_finding` tool.

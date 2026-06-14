@@ -215,7 +215,13 @@ during every measured run:
   (`SIFT_MCP_URL`) is an opt-in path verified only against a local mock
   serving the same contract; no accuracy figure here was produced against
   an external VM, and the remote-only discovered-tool path shifts evidence
-  verification to that VM (see [`architecture.md`](architecture.md)).
+  verification to that VM (see [`architecture.md`](architecture.md)). How
+  the verified bytes reach a content-consuming tool follows a documented
+  contract (`lib/sift-mcp/src/evidence.ts`): small text/JSON is sent inline
+  with its `sha256`, while large binary evidence is passed by reference
+  (`evidenceRef { path, sha256 }`) that the server resolves under its
+  evidence root and re-hashes before the tool runs, failing closed on a
+  missing file or hash mismatch.
 - `mcpFetcher`'s three SSRF layers executed cleanly against all
   enrichment requests in the recorded runs. Note a scope distinction:
   the committed recordings predate the `fetch_url` hardening and show the
