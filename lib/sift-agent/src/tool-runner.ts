@@ -5,7 +5,8 @@ import {
   ArtifactIntegrityError,
   type VerifiedArtifact,
 } from "@workspace/db";
-import { invokeTool, type ToolName } from "@workspace/sift-tools";
+import { callSiftTool } from "@workspace/sift-mcp";
+import { type ToolName } from "@workspace/sift-tools";
 
 const CONTENT_CONSUMING_TOOLS = new Set<ToolName>([
   "logParser",
@@ -79,7 +80,7 @@ export async function runToolOnArtifact(
         ? verified.bytes.toString("base64")
         : verified.artifact.content;
     const input = { ...(extraInput ?? {}), content };
-    const result = await invokeTool(toolName, input);
+    const result = await callSiftTool(toolName, input);
     if (result.ok) {
       ok = true;
       output = result.data;
@@ -168,7 +169,7 @@ export async function runTool(args: RunToolArgs): Promise<ToolRunResult> {
   let errorMessage: string | null = null;
   let ok = false;
   try {
-    const result = await invokeTool(toolName, input);
+    const result = await callSiftTool(toolName, input);
     if (result.ok) {
       ok = true;
       output = result.data;

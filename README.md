@@ -11,9 +11,15 @@ a verifiable chain of custody.
 It runs on **OpenAI gpt-5.4** and a self-built, SIFT-style forensic
 toolkit, in a single-agent **Direct Agent Extension** pattern: one agent
 driven directly on the model's native tool-calling in a persistent
-reasoning loop. (It is *not* the SANS SIFT Workstation, and despite the
-`mcpFetcher` / `mcp_endpoint` names it does *not* use the Model Context
-Protocol — those are internal labels.)
+reasoning loop. The forensic tools are executed through a **custom MCP
+(Model Context Protocol) server** (`lib/sift-mcp`, built on the official
+`@modelcontextprotocol/sdk`): every tool is registered as a typed MCP
+tool, the agent calls them over an in-process MCP client, and a stdio
+entrypoint exposes the same tool surface to external MCP clients. (The
+`mcpFetcher` tool and `mcp_endpoint` artifact kind are unrelated,
+older internal names; the real MCP layer is `lib/sift-mcp`. Casefile is
+*not* the SANS SIFT Workstation or "Protocol SIFT" — the forensic suite
+is original code.)
 
 **License:** MIT — see [`LICENSE`](LICENSE).
 
@@ -172,6 +178,7 @@ lib/
   api-client-react/  Generated React Query hooks
   db/                Drizzle schema, integrity triggers, hash verification
   sift-tools/        Eight forensic tools (pure; only mcpFetcher touches the network)
+  sift-mcp/          MCP server (official SDK) exposing sift-tools as typed MCP tools + in-process client + stdio entrypoint
   sift-agent/        Reasoning loop, OpenAI tool-call adapter, system prompt
 
 docs/                Architecture, description, dataset, accuracy report, execution logs, sample logs

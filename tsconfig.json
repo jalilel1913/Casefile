@@ -19,6 +19,9 @@
       "path": "./lib/sift-tools"
     },
     {
+      "path": "./lib/sift-mcp"
+    },
+    {
       "path": "./lib/sift-agent"
     },
     {

@@ -88,6 +88,17 @@ touches the network. This is a *self-built, SIFT-style* toolkit; it is
 not the SANS SIFT Workstation, and "SIFT" here is an homage rather than
 a dependency.
 
+These tools are not called directly by the agent. They are wrapped by a
+**custom MCP (Model Context Protocol) server** (`lib/sift-mcp/`, built on
+the official `@modelcontextprotocol/sdk`) that registers each one as a
+typed, schema-validated MCP tool. The agent executes every forensic tool
+by issuing an MCP `tools/call` over an in-process client
+(`InMemoryTransport`), and a stdio entrypoint exposes the identical tool
+surface to any external MCP client. This is the hackathon's **Custom MCP
+Server** pattern: the agent speaks MCP to reach its tools, and the MCP
+server registers only the typed forensic functions — there is no
+`execute_shell` or other generic primitive on that surface.
+
 **3. The persistence + integrity layer (`lib/db/`).** This is the part
 that makes the agent trustworthy. Postgres triggers make evidence
 immutable, every artifact read is hash-verified at runtime, and every
@@ -201,10 +212,13 @@ the right answer, and it is visible to the human in the UI.
   entropy/timeline/network/PCAP/disk-image analysis) — *not* the SANS
   SIFT Workstation
 
-> Honesty notes for judges: the `mcpFetcher` / `mcp_endpoint` names are
-> internal labels — Casefile does not use the Model Context Protocol. The
-> forensic suite is original code inspired by SIFT, not the SANS
-> distribution.
+> Honesty notes for judges: Casefile *does* speak the Model Context
+> Protocol — the forensic tools are wrapped by a custom MCP server
+> (`lib/sift-mcp`) that the agent calls over an in-process MCP client.
+> The separately-named `mcpFetcher` tool and `mcp_endpoint` artifact kind
+> are older internal labels unrelated to that MCP layer. The forensic
+> suite is original code inspired by SIFT, not the SANS SIFT Workstation
+> or "Protocol SIFT".
 
 ## What this is not
 

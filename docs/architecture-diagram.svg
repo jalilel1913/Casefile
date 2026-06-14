@@ -18,7 +18,7 @@
 
   <rect width="1200" height="880" fill="#f8fafc"/>
   <text x="40" y="50" class="title">Casefile — Autonomous Incident-Response Agent</text>
-  <text x="40" y="76" class="subtitle">Architectural pattern: Direct Agent Extension — a single agent on the model's native tool-calling, driven in a persistent reasoning loop.</text>
+  <text x="40" y="76" class="subtitle">Architectural pattern: Direct Agent Extension over a custom MCP server — one agent on the model's native tool-calling, executing forensic tools via MCP.</text>
 
   <!-- Replit container zone -->
   <rect x="40" y="270" width="742" height="560" rx="12" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/>
@@ -49,16 +49,23 @@
   <text x="460" y="430" class="box-sub">emits thought · tool_call · finding</text>
   <text x="460" y="450" class="box-sub">bounded by iteration limit</text>
 
+  <!-- SIFT MCP server -->
+  <rect x="440" y="500" width="320" height="96" rx="10" fill="#eef2ff" stroke="#94a3b8"/>
+  <text x="460" y="528" class="box-title">SIFT MCP Server</text>
+  <text x="460" y="550" class="box-sub">lib/sift-mcp · @modelcontextprotocol/sdk</text>
+  <text x="460" y="568" class="box-sub">wraps sift-tools as typed MCP tools</text>
+  <text x="460" y="586" class="box-sub">in-process client + stdio entrypoint</text>
+
   <!-- Forensic tools -->
-  <rect x="440" y="520" width="320" height="184" rx="10" fill="#ffffff" stroke="#94a3b8"/>
-  <text x="460" y="550" class="box-title">Forensic tools (pure functions)</text>
-  <text x="460" y="570" class="box-sub">lib/sift-tools — self-built SIFT-style</text>
-  <text x="460" y="590" class="box-sub">(NOT the SANS SIFT Workstation)</text>
-  <text x="460" y="610" class="box-sub">logParser · iocExtractor · entropyScanner</text>
-  <text x="460" y="630" class="box-sub">timelineBuilder · networkAnalyzer</text>
-  <text x="460" y="650" class="box-sub">pcapAnalyzer · diskImageAnalyzer</text>
-  <text x="460" y="670" class="box-sub">mcpFetcher (only tool that egresses)</text>
-  <text x="460" y="690" class="box-sub">all pure · reproducible · no DB writes</text>
+  <rect x="440" y="628" width="320" height="176" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="460" y="658" class="box-title">Forensic tools (pure functions)</text>
+  <text x="460" y="678" class="box-sub">lib/sift-tools — self-built SIFT-style</text>
+  <text x="460" y="698" class="box-sub">(NOT the SANS SIFT Workstation)</text>
+  <text x="460" y="718" class="box-sub">logParser · iocExtractor · entropyScanner</text>
+  <text x="460" y="738" class="box-sub">timelineBuilder · networkAnalyzer</text>
+  <text x="460" y="758" class="box-sub">pcapAnalyzer · diskImageAnalyzer</text>
+  <text x="460" y="778" class="box-sub">mcpFetcher (only tool that egresses)</text>
+  <text x="460" y="798" class="box-sub">all pure · reproducible · no DB writes</text>
 
   <!-- PostgreSQL -->
   <rect x="60" y="470" width="320" height="164" rx="10" fill="#fef9c3" stroke="#facc15"/>
@@ -85,11 +92,11 @@
   <text x="860" y="410" class="box-sub">(no API key in app code)</text>
 
   <!-- External: threat intel -->
-  <rect x="840" y="540" width="300" height="104" rx="10" fill="#ffffff" stroke="#94a3b8"/>
-  <text x="860" y="570" class="box-title">Public threat-intel</text>
-  <text x="860" y="590" class="box-sub">ipinfo · ipapi · AlienVault OTX</text>
-  <text x="860" y="610" class="box-sub">fixed server-side templates</text>
-  <text x="860" y="630" class="box-sub">reached only via mcpFetcher</text>
+  <rect x="840" y="652" width="300" height="104" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="860" y="682" class="box-title">Public threat-intel</text>
+  <text x="860" y="702" class="box-sub">ipinfo · ipapi · AlienVault OTX</text>
+  <text x="860" y="722" class="box-sub">fixed server-side templates</text>
+  <text x="860" y="742" class="box-sub">reached only via mcpFetcher</text>
 
   <!-- Edges -->
   <line x1="210" y1="214" x2="210" y2="300" class="edge" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
@@ -101,11 +108,14 @@
   <line x1="760" y1="372" x2="840" y2="372" class="edge" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
   <text x="800" y="364" text-anchor="middle" class="edge-label">tool_calls ⇄ messages</text>
 
-  <line x1="600" y1="464" x2="600" y2="520" class="edge" marker-end="url(#arrow)"/>
-  <text x="610" y="496" class="edge-label">dispatchToolCall()</text>
+  <line x1="600" y1="464" x2="600" y2="500" class="edge" marker-end="url(#arrow)"/>
+  <text x="610" y="486" class="edge-label">MCP tools/call</text>
 
-  <line x1="760" y1="580" x2="840" y2="580" class="edge" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
-  <text x="800" y="572" text-anchor="middle" class="edge-label">mcpFetcher · SSRF-gated</text>
+  <line x1="600" y1="596" x2="600" y2="628" class="edge" marker-end="url(#arrow)"/>
+  <text x="610" y="616" class="edge-label">invokeTool()</text>
+
+  <line x1="760" y1="704" x2="840" y2="704" class="edge" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="800" y="696" text-anchor="middle" class="edge-label">mcpFetcher · SSRF-gated</text>
 
   <polyline points="440,440 410,440 410,552 380,552" class="edge" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
   <text x="418" y="500" class="edge-label">verified reads · writes</text>
@@ -122,7 +132,7 @@
     <text x="40" y="52" class="pill" fill="#854d0e">Architectural (enforced)</text>
     <text x="16" y="74" class="legend">DB immutability triggers</text>
     <text x="16" y="92" class="legend">read-time hash re-verification</text>
-    <text x="16" y="110" class="legend">typed tool allow-list (no shell)</text>
+    <text x="16" y="110" class="legend">typed MCP tool allow-list (no shell)</text>
     <text x="16" y="128" class="legend">fixed-template fetch_url + SSRF</text>
 
     <rect x="16" y="144" width="14" height="14" rx="3" fill="#dbeafe" stroke="#60a5fa"/>

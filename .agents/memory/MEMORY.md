@@ -1,1 +1,1 @@
-- [case-room typecheck quirk](case-room-typecheck.md) — case-room is outside the tsc --build graph; has 2 deliberate DO-NOT-FIX errors; embed binary fixtures as verified base64.
+- [MCP tool layer & trust boundary](mcp-tool-layer.md) — forensic tools execute via lib/sift-mcp; evidence-integrity stays agent-side, BEFORE the MCP call.

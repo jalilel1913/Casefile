@@ -14,22 +14,37 @@ layers, and the file:function landmarks for every meaningful step.
 A standalone, uploadable rendering of the system diagram lives at
 [`architecture-diagram.svg`](architecture-diagram.svg).
 
-## Architectural pattern: Direct Agent Extension
+## Architectural pattern: Direct Agent Extension over a Custom MCP Server
 
 Casefile is a **single agent built directly on the model's native
-tool-calling**, driven in a persistent reasoning loop. It is not a
-multi-agent system, not an MCP-server integration, and not a wrapper
-around an agentic IDE. The loop in `lib/sift-agent/src/agent.ts` calls
+tool-calling**, driven in a persistent reasoning loop, that executes its
+forensic tools through a **custom Model Context Protocol (MCP) server**.
+It is not a multi-agent system and not a wrapper around an agentic IDE.
+The loop in `lib/sift-agent/src/agent.ts` calls
 `chat.completions.create` with a fixed tool catalog, dispatches the
 returned `tool_calls`, appends the results to the running message
 history, and repeats until the model voluntarily calls `finalize` or a
 bounded iteration limit trips.
 
+The forensic tools are not invoked in-process by the agent. They are
+exposed by an MCP server (`lib/sift-mcp`, built on the official
+`@modelcontextprotocol/sdk`) that registers every tool in the sift-tools
+registry as a typed, schema-validated MCP tool. The agent executes each
+forensic tool by issuing an MCP `tools/call` request through an
+in-process client (`callSiftTool`, wired over the SDK's
+`InMemoryTransport`), so the agent reaches its tools across a real MCP
+boundary rather than a direct function call. The same server ships a
+stdio entrypoint (`lib/sift-mcp/src/stdio.ts`), so any external MCP
+client can list and call the identical tool surface. This maps to the
+hackathon's **Custom MCP Server** pattern.
+
 Naming caveat (kept honest for the judges): the network-fetch tool is
-called `mcpFetcher` and one artifact kind is `mcp_endpoint`, but Casefile
-does **not** speak the Model Context Protocol. Those names are internal
-labels that predate the final design; there is no external MCP server in
-the loop.
+called `mcpFetcher` and one artifact kind is `mcp_endpoint`. Those two
+names predate the MCP server and are unrelated to it — `mcpFetcher` is
+just the threat-intel fetch tool, and `mcp_endpoint` is an evidence
+kind. The actual MCP layer is `lib/sift-mcp`. Casefile is also **not**
+the SANS SIFT Workstation or "Protocol SIFT"; the forensic suite is
+original code.
 
 ## System overview
 
@@ -42,6 +57,7 @@ flowchart TB
     subgraph Server["Replit container"]
         API["API Server (Express 5)<br/>artifacts/api-server"]
         Agent["Casefile Agent (persistent reasoning loop)<br/>lib/sift-agent"]
+        MCP["SIFT MCP Server<br/>lib/sift-mcp<br/>(@modelcontextprotocol/sdk)"]
         Tools["Forensic tools (pure functions)<br/>lib/sift-tools"]
         DB[("Postgres<br/>lib/db<br/>+ integrity triggers")]
     end
@@ -54,7 +70,8 @@ flowchart TB
     API -- "runInvestigation()" --> Agent
     Agent -- "chat.completions.create<br/>(with tool definitions)" --> LLM
     LLM -- "tool_calls" --> Agent
-    Agent -- "dispatchToolCall()" --> Tools
+    Agent -- "MCP tools/call<br/>(in-process client)" --> MCP
+    MCP -- "invokeTool()" --> Tools
     Tools -- "mcpFetcher only<br/>(fixed templates + SSRF-gated)" --> Intel
     Agent <-- "verified artifact reads<br/>+ execution_logs writes<br/>+ analysis_steps writes<br/>+ incident_reports writes" --> DB
     API <-- "case + report reads" --> DB
@@ -72,6 +89,7 @@ sequenceDiagram
     participant G as Agent loop<br/>(agent.ts)
     participant D as Tool dispatch<br/>(tool-adapter.ts)
     participant R as Tool runner<br/>(tool-runner.ts)
+    participant M as SIFT MCP Server<br/>(sift-mcp)
     participant T as Forensic tool<br/>(sift-tools)
     participant DB as Postgres<br/>(integrity triggers)
     participant L as OpenAI gpt-5.4
@@ -89,14 +107,18 @@ sequenceDiagram
             D->>R: runToolOnArtifact(caseId, artifactId, toolName)
             R->>DB: loadVerifiedArtifact(artifactId)
             Note over R,DB: re-hashes content,<br/>compares to stored sha256
-            R->>T: invokeTool(input)
-            T-->>R: structured output
+            R->>M: MCP tools/call (callSiftTool)
+            M->>T: invokeTool(input)
+            T-->>M: structured output
+            M-->>R: MCP tool result
             R->>DB: INSERT execution_logs<br/>(verified_hash, output_hash, ok)
         else structured tool (build_timeline, analyze_network, fetch_url)
             G->>D: dispatchToolCall
             D->>R: runTool(caseId, toolName, input)
-            R->>T: invokeTool(input)
-            T-->>R: structured output
+            R->>M: MCP tools/call (callSiftTool)
+            M->>T: invokeTool(input)
+            T-->>M: structured output
+            M-->>R: MCP tool result
             R->>DB: INSERT execution_logs
         else record_finding
             G->>D: dispatchRecordFinding
@@ -123,6 +145,8 @@ sequenceDiagram
 | `fetch_url` template resolution | `lib/sift-agent/src/tool-adapter.ts` | endpoint-template table (server-side URL build) |
 | Artifact tool wrapper | `lib/sift-agent/src/tool-runner.ts` | `runToolOnArtifact` |
 | Structured tool wrapper | `lib/sift-agent/src/tool-runner.ts` | `runTool` |
+| In-process MCP client | `lib/sift-mcp/src/client.ts` | `callSiftTool` |
+| MCP server (registry → MCP tools) | `lib/sift-mcp/src/server.ts` | `buildSiftMcpServer` |
 | Forensic tool table | `lib/sift-tools/src/index.ts` | `invokeTool` / `TOOL_REGISTRY` |
 | Hash re-verification | `lib/db/src/integrity.ts` | `loadVerifiedArtifact` |
 | Finding write | `lib/sift-agent/src/tool-adapter.ts` | `dispatchRecordFinding` |
@@ -162,9 +186,12 @@ runtime. The agent cannot bypass them regardless of what it "decides":
 - **Tamper-evident audit trail** — every `execution_logs` row persists
   the `verified_hash` of the artifact read and the `output_hash`
   returned to the model.
-- **Typed tool allow-list** — the agent has only the typed forensic
-  functions in the registry. There is no shell tool, no file-write
-  tool, no arbitrary-code tool, and no DB write path to evidence.
+- **Typed tool allow-list (enforced at the MCP layer)** — the SIFT MCP
+  server (`lib/sift-mcp`) registers only the typed forensic functions
+  from the registry as MCP tools. There is no `execute_shell` primitive,
+  no file-write tool, no arbitrary-code tool, and no DB write path to
+  evidence — the exposed MCP tool surface is exactly the schema-validated
+  tools and nothing else.
 - **`fetch_url` cannot construct arbitrary URLs** — the model supplies
   an *endpoint name* and an *IOC value*; the actual URL is built
   server-side from a fixed template, and the IOC is validated against
@@ -250,7 +277,9 @@ All tools live in `lib/sift-tools/src/` and follow the same
 schema, and a pure `run()` function. They are a **self-built,
 SIFT-style** suite — they are *not* the SANS SIFT Workstation, and the
 name is an homage, not a dependency. Only `mcpFetcher` touches the
-network; everything else is pure-local and reproducible.
+network; everything else is pure-local and reproducible. Every tool in
+this catalog is exposed to the agent — and to any external MCP client —
+through the SIFT MCP server in `lib/sift-mcp`.
 
 | Tool | Purpose | Network? |
 | --- | --- | --- |
@@ -264,7 +293,8 @@ network; everything else is pure-local and reproducible.
 | `mcpFetcher` | Fetches a public HTTP(S) threat-intel URL, built from a fixed server-side template | **yes** |
 
 The agent exposes eleven tool names to the model: the eight forensic
-tools above plus `list_artifacts`, `record_finding`, and `finalize`.
+tools above (executed over the MCP server) plus the agent-native
+`list_artifacts`, `record_finding`, and `finalize`.
 
 `mcpFetcher` is defended against SSRF at three levels: literal host
 checks (blocks loopback / RFC1918 / link-local / ULA / CGNAT, including
@@ -289,12 +319,14 @@ lib/
   api-client-react/  Generated React Query hooks for the frontend
   db/                Drizzle schema, integrity triggers, hash-verification helpers
   sift-tools/        The forensic-tool catalog (pure, no DB, no network except mcpFetcher)
+  sift-mcp/          MCP server (official SDK) exposing sift-tools as typed MCP tools,
+                     plus the in-process client the agent calls and a stdio entrypoint
   sift-agent/        The reasoning loop, OpenAI tool-call adapter, system prompt
 ```
 
-The agent depends on `sift-tools` and `db`. The API server depends on
-the agent and `db`. The UI depends on `api-client-react` and
-`api-zod`. There are no cycles.
+The agent depends on `sift-mcp` and `db`; `sift-mcp` depends on
+`sift-tools`. The API server depends on the agent and `db`. The UI
+depends on `api-client-react` and `api-zod`. There are no cycles.
 
 ## Why this shape
 

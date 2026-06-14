@@ -205,7 +205,11 @@ during every measured run:
   (`lib/db/src/triggers.sql`).
 - The agent had no shell, file-write, or arbitrary-code tool — only the
   typed forensic functions in the registry. No path existed to mutate or
-  destroy evidence even if instructed.
+  destroy evidence even if instructed. (These tools are now exposed
+  through the custom MCP server in `lib/sift-mcp`, which registers only
+  the typed functions and no generic primitive; it wraps the identical
+  `invokeTool` implementations, so tool outputs are unchanged from the
+  recordings below, which predate the MCP layer.)
 - `mcpFetcher`'s three SSRF layers executed cleanly against all
   enrichment requests in the recorded runs. Note a scope distinction:
   the committed recordings predate the `fetch_url` hardening and show the

@@ -9,6 +9,7 @@
   "dependencies": {
     "@workspace/db": "workspace:*",
     "@workspace/integrations-openai-ai-server": "workspace:*",
+    "@workspace/sift-mcp": "workspace:*",
     "@workspace/sift-tools": "workspace:*",
     "drizzle-orm": "catalog:",
     "openai": "^6.27.0",

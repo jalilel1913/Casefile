@@ -22,6 +22,10 @@ License: MIT.
 - **API codegen**: Orval (from OpenAPI spec)
 - **AI engine**: OpenAI gpt-5.4 via Replit AI Integrations proxy
   (no API key required; client at `lib/integrations-openai-ai-server`)
+- **Tool protocol**: custom MCP (Model Context Protocol) server at
+  `lib/sift-mcp` (official `@modelcontextprotocol/sdk`) wrapping the
+  sift-tools registry; the agent calls tools over an in-process MCP
+  client, with a stdio entrypoint for external MCP clients
 - **Build**: esbuild (CJS bundle)
 
 ## Key Commands
@@ -43,6 +47,7 @@ License: MIT.
 - [x] Step 7 — React frontend case room interface
 - [x] Step 8 — Streaming polish + bundled sample dataset
 - [x] Step 9 — Structured reasoning cards + training-mode toggle + execution-log viewer
+- [x] Step 10 — Custom MCP server (`lib/sift-mcp`) wrapping sift-tools; agent executes forensic tools over MCP
 
 ## Hackathon Timeline
 
