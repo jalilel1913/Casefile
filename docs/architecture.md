@@ -30,13 +30,58 @@ The forensic tools are not invoked in-process by the agent. They are
 exposed by an MCP server (`lib/sift-mcp`, built on the official
 `@modelcontextprotocol/sdk`) that registers every tool in the sift-tools
 registry as a typed, schema-validated MCP tool. The agent executes each
-forensic tool by issuing an MCP `tools/call` request through an
-in-process client (`callSiftTool`, wired over the SDK's
-`InMemoryTransport`), so the agent reaches its tools across a real MCP
-boundary rather than a direct function call. The same server ships a
-stdio entrypoint (`lib/sift-mcp/src/stdio.ts`), so any external MCP
-client can list and call the identical tool surface. This maps to the
-hackathon's **Custom MCP Server** pattern.
+forensic tool by issuing an MCP `tools/call` request through the MCP
+client in `lib/sift-mcp/src/client.ts` (`callSiftTool`), so the agent
+reaches its tools across a real MCP boundary rather than a direct
+function call. The same server ships a stdio entrypoint
+(`lib/sift-mcp/src/stdio.ts`), so any external MCP client can list and
+call the identical tool surface. This maps to the hackathon's **Custom
+MCP Server** pattern.
+
+The MCP client has **two transports**, selected by environment config:
+
+- **In-process (default).** With no remote config set, `callSiftTool`
+  talks to a locally-built `buildSiftMcpServer` over the SDK's
+  `InMemoryTransport`. The forensic tools are Casefile's own
+  *simulated*, SIFT-style TypeScript tools — pure, reproducible, no real
+  DFIR binaries. This is what runs in the demo and in CI.
+- **Remote Streamable-HTTP (opt-in).** When `SIFT_MCP_URL` is set, the
+  same `callSiftTool` connects over the SDK's `StreamableHTTPClientTransport`
+  to a remote MCP server — intended to be a real **SANS SIFT
+  Workstation** the user hosts on their own VM, exposing genuine DFIR
+  tooling (Volatility 3, The Sleuth Kit, YARA, ...). An optional
+  `SIFT_MCP_TOKEN` is sent as a bearer token. In this mode the agent also
+  performs **remote tool discovery**: it calls `tools/list`, and any tool
+  the remote advertises that the static catalog does not already wrap is
+  exposed to the model as a callable tool (generic remote dispatch). If a
+  remote is configured but unreachable, the run fails explicitly rather
+  than silently degrading to the simulated in-process tools — an operator
+  who pointed Casefile at a real Workstation must not be handed fake
+  results without knowing it.
+
+The remote VM server and a same-process local mock both serve the
+identical Streamable-HTTP contract; see `lib/sift-mcp/src/http.ts` (mock)
+and `lib/sift-mcp/reference/sift-workstation-server.mjs` (user-owned
+reference to drop onto a SIFT VM). The remote path is verified inside
+Replit against the local mock; it has not been run against an external VM
+from here.
+
+### Trust boundary across the two transports
+
+For built-in tools, evidence integrity is enforced **agent-side, before
+the MCP call**: `runToolOnArtifact` loads the artifact through
+`loadVerifiedArtifact` (which re-hashes the bytes), and only the verified
+content — tagged with its `sha256` — is sent over MCP, in-process or
+remote. The integrity guarantee therefore holds identically in both
+transports for tools the agent feeds content to.
+
+Remote-only *discovered* tools are different and this is stated plainly:
+they operate on evidence that lives on the Workstation, which the agent
+is not the custodian of and cannot re-hash. For those tools the agent
+passes through the model's arguments and records the call (with the
+endpoint), but the integrity guarantee shifts to the Workstation. Every
+execution log records the serving `mcpEndpoint`, and remote-only calls
+are additionally flagged `remote: true`.
 
 Naming caveat (kept honest for the judges): the network-fetch tool is
 called `mcpFetcher` and one artifact kind is `mcp_endpoint`. Those two
@@ -57,23 +102,25 @@ flowchart TB
     subgraph Server["Replit container"]
         API["API Server (Express 5)<br/>artifacts/api-server"]
         Agent["Casefile Agent (persistent reasoning loop)<br/>lib/sift-agent"]
-        MCP["SIFT MCP Server<br/>lib/sift-mcp<br/>(@modelcontextprotocol/sdk)"]
+        MCP["SIFT MCP Server (in-process, default)<br/>lib/sift-mcp<br/>(@modelcontextprotocol/sdk)"]
         Tools["Forensic tools (pure functions)<br/>lib/sift-tools"]
         DB[("Postgres<br/>lib/db<br/>+ integrity triggers")]
     end
 
     LLM["OpenAI gpt-5.4<br/>(via Replit AI proxy)"]
     Intel["Public threat-intel<br/>(ipinfo.io, ipapi.co, AlienVault OTX)"]
+    VM["Remote SIFT Workstation MCP server<br/>(user-hosted VM, opt-in via SIFT_MCP_URL)<br/>real DFIR tools: Volatility / TSK / YARA"]
 
     UI -- "REST: create case,<br/>upload artifacts" --> API
     UI -- "SSE: live investigation stream" --> API
     API -- "runInvestigation()" --> Agent
     Agent -- "chat.completions.create<br/>(with tool definitions)" --> LLM
     LLM -- "tool_calls" --> Agent
-    Agent -- "MCP tools/call<br/>(in-process client)" --> MCP
+    Agent -- "MCP tools/call<br/>(InMemoryTransport, default)" --> MCP
+    Agent -. "MCP tools/call + tools/list<br/>(StreamableHTTP, when SIFT_MCP_URL set)" .-> VM
     MCP -- "invokeTool()" --> Tools
     Tools -- "mcpFetcher only<br/>(fixed templates + SSRF-gated)" --> Intel
-    Agent <-- "verified artifact reads<br/>+ execution_logs writes<br/>+ analysis_steps writes<br/>+ incident_reports writes" --> DB
+    Agent <-- "verified artifact reads<br/>+ execution_logs writes (incl. mcpEndpoint)<br/>+ analysis_steps writes<br/>+ incident_reports writes" --> DB
     API <-- "case + report reads" --> DB
 ```
 
@@ -145,8 +192,12 @@ sequenceDiagram
 | `fetch_url` template resolution | `lib/sift-agent/src/tool-adapter.ts` | endpoint-template table (server-side URL build) |
 | Artifact tool wrapper | `lib/sift-agent/src/tool-runner.ts` | `runToolOnArtifact` |
 | Structured tool wrapper | `lib/sift-agent/src/tool-runner.ts` | `runTool` |
-| In-process MCP client | `lib/sift-mcp/src/client.ts` | `callSiftTool` |
+| MCP client (in-process + remote) | `lib/sift-mcp/src/client.ts` | `callSiftTool` / `listSiftTools` |
 | MCP server (registry → MCP tools) | `lib/sift-mcp/src/server.ts` | `buildSiftMcpServer` |
+| Remote HTTP server / local mock | `lib/sift-mcp/src/http.ts` | (Streamable-HTTP entrypoint) |
+| Remote VM reference server | `lib/sift-mcp/reference/sift-workstation-server.mjs` | (user-owned, adapt) |
+| Remote tool discovery → LLM catalog | `lib/sift-agent/src/tool-adapter.ts` | `buildOpenAiTools` |
+| Remote-only tool dispatch | `lib/sift-agent/src/tool-runner.ts` | `runRemoteTool` |
 | Forensic tool table | `lib/sift-tools/src/index.ts` | `invokeTool` / `TOOL_REGISTRY` |
 | Hash re-verification | `lib/db/src/integrity.ts` | `loadVerifiedArtifact` |
 | Finding write | `lib/sift-agent/src/tool-adapter.ts` | `dispatchRecordFinding` |
@@ -292,9 +343,14 @@ through the SIFT MCP server in `lib/sift-mcp`.
 | `diskImageAnalyzer` | Pure-Node MBR/GPT parser, filesystem-signature detector, printable-string + embedded-indicator harvester (over decoded bytes) | no |
 | `mcpFetcher` | Fetches a public HTTP(S) threat-intel URL, built from a fixed server-side template | **yes** |
 
-The agent exposes eleven tool names to the model: the eight forensic
-tools above (executed over the MCP server) plus the agent-native
-`list_artifacts`, `record_finding`, and `finalize`.
+In the default (in-process) mode the agent exposes eleven tool names to
+the model: the eight forensic tools above (executed over the MCP server)
+plus the agent-native `list_artifacts`, `record_finding`, and `finalize`.
+When a remote SIFT Workstation is configured (`SIFT_MCP_URL`), the agent
+additionally discovers the remote's `tools/list` and appends any tool it
+does not already wrap (matched by underlying name) so real Workstation
+capabilities become callable; tools the remote re-implements with the
+same names as the catalog above are not duplicated.
 
 `mcpFetcher` is defended against SSRF at three levels: literal host
 checks (blocks loopback / RFC1918 / link-local / ULA / CGNAT, including
@@ -320,7 +376,9 @@ lib/
   db/                Drizzle schema, integrity triggers, hash-verification helpers
   sift-tools/        The forensic-tool catalog (pure, no DB, no network except mcpFetcher)
   sift-mcp/          MCP server (official SDK) exposing sift-tools as typed MCP tools,
-                     plus the in-process client the agent calls and a stdio entrypoint
+                     the dual-transport client the agent calls (in-process default /
+                     remote Streamable-HTTP), a stdio entrypoint, an HTTP server +
+                     local mock, and a user-owned reference VM server (reference/)
   sift-agent/        The reasoning loop, OpenAI tool-call adapter, system prompt
 ```
 

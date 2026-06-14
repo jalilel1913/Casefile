@@ -92,12 +92,29 @@ These tools are not called directly by the agent. They are wrapped by a
 **custom MCP (Model Context Protocol) server** (`lib/sift-mcp/`, built on
 the official `@modelcontextprotocol/sdk`) that registers each one as a
 typed, schema-validated MCP tool. The agent executes every forensic tool
-by issuing an MCP `tools/call` over an in-process client
-(`InMemoryTransport`), and a stdio entrypoint exposes the identical tool
-surface to any external MCP client. This is the hackathon's **Custom MCP
-Server** pattern: the agent speaks MCP to reach its tools, and the MCP
-server registers only the typed forensic functions — there is no
-`execute_shell` or other generic primitive on that surface.
+by issuing an MCP `tools/call`, and a stdio entrypoint exposes the
+identical tool surface to any external MCP client. This is the
+hackathon's **Custom MCP Server** pattern: the agent speaks MCP to reach
+its tools, and the MCP server registers only the typed forensic
+functions — there is no `execute_shell` or other generic primitive on
+that surface.
+
+The MCP client speaks over **two transports**. By default it uses the
+SDK's `InMemoryTransport` to an in-process server wrapping Casefile's own
+*simulated*, SIFT-style tools — pure TypeScript, reproducible, what the
+demo runs on. When `SIFT_MCP_URL` (and optional `SIFT_MCP_TOKEN`) is set,
+the same client connects over Streamable-HTTP to a **remote SANS SIFT
+Workstation** the user hosts on their own VM, running real DFIR tools
+(Volatility 3, The Sleuth Kit, YARA, ...). In remote mode the agent also
+discovers the Workstation's `tools/list` and exposes any capability it
+does not already wrap, so the real tools are genuinely callable rather
+than renamed local stand-ins. The remote path is verified inside Replit
+against a local mock that serves the same contract; a reference VM server
+to drop onto a SIFT box ships in `lib/sift-mcp/reference/`. For built-in
+tools, evidence-integrity verification still runs agent-side *before* the
+MCP call in either transport; for remote-only discovered tools (which act
+on evidence held by the Workstation) that guarantee shifts to the VM, and
+every execution log records which endpoint served the call.
 
 **3. The persistence + integrity layer (`lib/db/`).** This is the part
 that makes the agent trustworthy. Postgres triggers make evidence
@@ -214,11 +231,17 @@ the right answer, and it is visible to the human in the UI.
 
 > Honesty notes for judges: Casefile *does* speak the Model Context
 > Protocol — the forensic tools are wrapped by a custom MCP server
-> (`lib/sift-mcp`) that the agent calls over an in-process MCP client.
-> The separately-named `mcpFetcher` tool and `mcp_endpoint` artifact kind
-> are older internal labels unrelated to that MCP layer. The forensic
-> suite is original code inspired by SIFT, not the SANS SIFT Workstation
-> or "Protocol SIFT".
+> (`lib/sift-mcp`) that the agent calls over an MCP client. By default
+> that client uses an in-process transport to Casefile's own *simulated*
+> SIFT-style tools; set `SIFT_MCP_URL` and it connects over
+> Streamable-HTTP to a real SANS SIFT Workstation you host, discovering
+> and calling that VM's real DFIR tools. The remote path is verified
+> inside Replit against a local mock serving the same contract — it has
+> not been exercised against an external VM from here, and provisioning
+> the VM is the user's responsibility. The separately-named `mcpFetcher`
+> tool and `mcp_endpoint` artifact kind are older internal labels
+> unrelated to that MCP layer. The forensic suite is original code
+> inspired by SIFT, not the SANS SIFT Workstation or "Protocol SIFT".
 
 ## What this is not
 

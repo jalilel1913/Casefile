@@ -14,9 +14,14 @@ driven directly on the model's native tool-calling in a persistent
 reasoning loop. The forensic tools are executed through a **custom MCP
 (Model Context Protocol) server** (`lib/sift-mcp`, built on the official
 `@modelcontextprotocol/sdk`): every tool is registered as a typed MCP
-tool, the agent calls them over an in-process MCP client, and a stdio
-entrypoint exposes the same tool surface to external MCP clients. (The
-`mcpFetcher` tool and `mcp_endpoint` artifact kind are unrelated,
+tool, the agent calls them over an MCP client, and a stdio entrypoint
+exposes the same tool surface to external MCP clients. By default the
+client uses an in-process transport to Casefile's own *simulated*,
+SIFT-style tools; set `SIFT_MCP_URL` (and optional `SIFT_MCP_TOKEN`) and
+the same client connects over Streamable-HTTP to a **real SANS SIFT
+Workstation you host on your own VM**, discovering and calling its real
+DFIR tools (see [Remote SIFT Workstation](#remote-sift-workstation-over-mcp)).
+(The `mcpFetcher` tool and `mcp_endpoint` artifact kind are unrelated,
 older internal names; the real MCP layer is `lib/sift-mcp`. Casefile is
 *not* the SANS SIFT Workstation or "Protocol SIFT" — the forensic suite
 is original code.)
@@ -97,6 +102,9 @@ export AI_INTEGRATIONS_OPENAI_BASE_URL=https://...   # Replit AI proxy URL
 export AI_INTEGRATIONS_OPENAI_API_KEY=...            # Replit AI proxy key
 #    Optional:
 export LOG_LEVEL=info
+#    Optional — connect to a remote SANS SIFT Workstation (see below):
+export SIFT_MCP_URL=https://your-sift-vm.example:8790/mcp
+export SIFT_MCP_TOKEN=your-long-random-shared-secret
 
 # 3. Apply DB schema (creates tables; integrity triggers are installed
 #    at API-server startup, not by this command)
@@ -115,6 +123,60 @@ listens on its own `$PORT` and talks to the API server using its
 generated client. The simplest off-Replit setup is to put both behind a
 reverse proxy that serves the UI and the `/api/*` routes from the same
 origin.
+
+## Remote SIFT Workstation over MCP
+
+By default the agent runs its forensic tools over an **in-process** MCP
+server wrapping Casefile's own *simulated*, SIFT-style tools (pure
+TypeScript — no real DFIR binaries). That is what the demo and the
+accuracy harness use, and it requires no extra setup.
+
+If you host a real **SANS SIFT Workstation** (or any MCP server speaking
+the same contract) on your own VM, the agent can drive its real tools
+over the network instead:
+
+1. **On the VM**, run an MCP server that serves the MCP Streamable-HTTP
+   transport at `POST /mcp`. A ready-to-adapt reference server ships at
+   [`lib/sift-mcp/reference/sift-workstation-server.mjs`](lib/sift-mcp/reference/sift-workstation-server.mjs)
+   — it wraps example DFIR CLIs (Volatility 3, The Sleuth Kit, YARA) and
+   is meant to be edited for your toolset:
+
+   ```bash
+   # on the SIFT Workstation VM
+   npm install @modelcontextprotocol/sdk zod
+   SIFT_MCP_TOKEN=<a-long-random-secret> node sift-workstation-server.mjs
+   ```
+
+2. **On the agent (api-server) side**, point Casefile at it:
+
+   ```bash
+   export SIFT_MCP_URL=https://your-sift-vm.example:8790/mcp
+   export SIFT_MCP_TOKEN=<the-same-secret>   # optional, but recommended
+   ```
+
+The agent then connects over Streamable-HTTP, calls `tools/list`, and
+exposes any Workstation tool it does not already wrap to the model
+(generic remote dispatch). Each tool call is recorded in
+`execution_logs` with the serving endpoint. If a remote is configured but
+unreachable, the run fails explicitly — Casefile does **not** silently
+fall back to its simulated in-process tools, so you never get fake
+results while believing you are driving a real Workstation. (To return to
+the built-in tools, unset `SIFT_MCP_URL`.)
+
+**Trust boundary.** For built-in tools the agent fed content to, evidence
+integrity (SHA-256) is still verified agent-side *before* the MCP call, in
+either transport. Remote-only discovered tools act on evidence held by
+the Workstation, which the agent cannot re-hash, so that guarantee shifts
+to the VM — keep the VM and its evidence store trusted, always set a
+token, and put the endpoint behind TLS / a private network. Do **not**
+add a generic "run any shell command" tool to your server.
+
+**Verification status.** The remote path is exercised inside Replit
+against a local mock that serves the identical contract
+([`lib/sift-mcp/src/http.ts`](lib/sift-mcp/src/http.ts), run with
+`pnpm --filter @workspace/sift-mcp serve`). It has not been run against an
+external VM from this environment; provisioning the Workstation is the
+user's responsibility.
 
 ## A 5-minute guided walkthrough
 
@@ -178,7 +240,9 @@ lib/
   api-client-react/  Generated React Query hooks
   db/                Drizzle schema, integrity triggers, hash verification
   sift-tools/        Eight forensic tools (pure; only mcpFetcher touches the network)
-  sift-mcp/          MCP server (official SDK) exposing sift-tools as typed MCP tools + in-process client + stdio entrypoint
+  sift-mcp/          MCP server (official SDK) exposing sift-tools as typed MCP tools;
+                     dual-transport client (in-process default / remote Streamable-HTTP),
+                     stdio entrypoint, HTTP server + local mock, reference/ VM server
   sift-agent/        Reasoning loop, OpenAI tool-call adapter, system prompt
 
 docs/                Architecture, description, dataset, accuracy report, execution logs, sample logs

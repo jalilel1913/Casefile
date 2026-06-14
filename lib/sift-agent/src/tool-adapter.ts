@@ -388,11 +388,6 @@ const STATIC_UNDERLYING: Set<string> = new Set(
   TOOLS.map((t) => t.underlyingTool).filter((x): x is ToolName => !!x),
 );
 
-// Remote-only tools discovered over MCP tools/list on the most recent
-// buildOpenAiTools() call. dispatchToolCall consults this to route a tool the
-// model invoked that has no static wrapper.
-const remoteToolDefs = new Map<string, DiscoveredTool>();
-
 function staticOpenAiTools(): ChatCompletionTool[] {
   return TOOLS.map((t) => ({
     type: "function",
@@ -407,6 +402,18 @@ function staticOpenAiTools(): ChatCompletionTool[] {
   }));
 }
 
+export interface BuiltTools {
+  tools: ChatCompletionTool[];
+  /**
+   * Names of remote-only tools the model may call that have no static wrapper
+   * and must be routed through `runRemoteTool`. Empty in in-process mode. This
+   * is returned (not stored globally) so concurrent investigations cannot
+   * clobber each other's routing — the agent threads it into the dispatch
+   * context for its run.
+   */
+  remoteToolNames: Set<string>;
+}
+
 /**
  * Build the tool catalog exposed to the model. Always includes the agent's
  * static tools. When a remote SIFT MCP server is configured, the agent also
@@ -414,22 +421,22 @@ function staticOpenAiTools(): ChatCompletionTool[] {
  * — capabilities a real Workstation has that the local catalog does not — so
  * they are genuinely callable by the model rather than renamed stand-ins.
  *
- * Remote discovery is best-effort: if the server is unreachable, the agent
- * falls back to its static catalog rather than failing the investigation.
+ * If a remote server is configured but discovery fails, this throws rather than
+ * silently degrading to the simulated in-process tools: an operator who pointed
+ * Casefile at a real Workstation must not be handed fake results without
+ * knowing it. (When no remote is configured, in-process is the intended mode
+ * and no discovery happens.)
  */
-export async function buildOpenAiTools(): Promise<ChatCompletionTool[]> {
-  remoteToolDefs.clear();
+export async function buildOpenAiTools(): Promise<BuiltTools> {
   const base = staticOpenAiTools();
-  if (!isRemoteMcp()) return base;
-
-  let discovered: DiscoveredTool[];
-  try {
-    discovered = await listSiftTools();
-  } catch {
-    return base;
+  if (!isRemoteMcp()) {
+    return { tools: base, remoteToolNames: new Set() };
   }
 
+  const discovered: DiscoveredTool[] = await listSiftTools();
+
   const staticNames = new Set(TOOLS.map((t) => t.name as string));
+  const remoteToolNames = new Set<string>();
   const remoteTools: ChatCompletionTool[] = [];
   for (const tool of discovered) {
     // Skip anything the static catalog already covers, by either the
@@ -437,7 +444,7 @@ export async function buildOpenAiTools(): Promise<ChatCompletionTool[]> {
     if (STATIC_UNDERLYING.has(tool.name) || staticNames.has(tool.name)) {
       continue;
     }
-    remoteToolDefs.set(tool.name, tool);
+    remoteToolNames.add(tool.name);
     remoteTools.push({
       type: "function",
       function: {
@@ -450,19 +457,31 @@ export async function buildOpenAiTools(): Promise<ChatCompletionTool[]> {
       },
     });
   }
-  return [...base, ...remoteTools];
+  return { tools: [...base, ...remoteTools], remoteToolNames };
 }
 
 // ---------- Dispatch result ----------
 
 export type DispatchResult =
-  | { kind: "tool_result"; ok: boolean; data: unknown; runResult?: ToolRunResult }
+  | {
+      kind: "tool_result";
+      ok: boolean;
+      data: unknown;
+      runResult?: { executionLogId: string; verifiedHash: string | null };
+    }
   | { kind: "finding"; analysisStepId: string; step: number }
   | { kind: "finalized"; reportId: string }
   | { kind: "error"; message: string };
 
 export interface DispatchContext {
   caseId: string;
+  /**
+   * Remote-only tool names discovered for this investigation (from
+   * `buildOpenAiTools`). A tool named here with no static wrapper is routed to
+   * the remote MCP server. Threaded per-run so concurrent investigations stay
+   * isolated.
+   */
+  remoteToolNames?: ReadonlySet<string>;
 }
 
 export async function dispatchToolCall(
@@ -472,6 +491,9 @@ export async function dispatchToolCall(
 ): Promise<DispatchResult> {
   const def = TOOLS.find((t) => t.name === name);
   if (!def) {
+    if (ctx.remoteToolNames?.has(name)) {
+      return dispatchRemoteTool(name, rawArgs, ctx);
+    }
     return { kind: "error", message: `Unknown tool '${name}'` };
   }
   let parsedArgsInput: unknown;
@@ -601,6 +623,51 @@ async function dispatchStructuredTool(
         }
       : { error: runResult.error },
     runResult,
+  };
+}
+
+async function dispatchRemoteTool(
+  toolName: string,
+  rawArgs: string,
+  ctx: DispatchContext,
+): Promise<DispatchResult> {
+  let input: Record<string, unknown>;
+  try {
+    const parsed = rawArgs ? JSON.parse(rawArgs) : {};
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        kind: "error",
+        message: `Arguments for '${toolName}' must be a JSON object`,
+      };
+    }
+    input = parsed as Record<string, unknown>;
+  } catch (e) {
+    return {
+      kind: "error",
+      message: `Could not parse arguments for '${toolName}': ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    };
+  }
+  const runResult = await runRemoteTool({
+    caseId: ctx.caseId,
+    toolName,
+    input,
+  });
+  return {
+    kind: "tool_result",
+    ok: runResult.ok,
+    data: runResult.ok
+      ? {
+          execution_log_id: runResult.executionLogId,
+          mcp_endpoint: runResult.mcpEndpoint,
+          output: runResult.output,
+        }
+      : { error: runResult.error },
+    runResult: {
+      executionLogId: runResult.executionLogId,
+      verifiedHash: null,
+    },
   };
 }
 

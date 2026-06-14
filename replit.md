@@ -24,8 +24,14 @@ License: MIT.
   (no API key required; client at `lib/integrations-openai-ai-server`)
 - **Tool protocol**: custom MCP (Model Context Protocol) server at
   `lib/sift-mcp` (official `@modelcontextprotocol/sdk`) wrapping the
-  sift-tools registry; the agent calls tools over an in-process MCP
-  client, with a stdio entrypoint for external MCP clients
+  sift-tools registry. The agent's MCP client is dual-transport:
+  in-process (`InMemoryTransport`) by default over Casefile's simulated
+  tools, or remote Streamable-HTTP to a user-hosted SANS SIFT
+  Workstation when `SIFT_MCP_URL` (optional `SIFT_MCP_TOKEN`) is set —
+  with remote `tools/list` discovery for the VM's real DFIR tools.
+  A stdio entrypoint serves external MCP clients; `src/http.ts` is the
+  HTTP server / local mock and `reference/` holds a user-owned VM server.
+  Remote path verified against the local mock only, not an external VM.
 - **Build**: esbuild (CJS bundle)
 
 ## Key Commands

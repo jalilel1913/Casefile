@@ -209,7 +209,13 @@ during every measured run:
   through the custom MCP server in `lib/sift-mcp`, which registers only
   the typed functions and no generic primitive; it wraps the identical
   `invokeTool` implementations, so tool outputs are unchanged from the
-  recordings below, which predate the MCP layer.)
+  recordings below, which predate the MCP layer.) All measured runs used
+  the **in-process** MCP transport over Casefile's simulated tools. The
+  remote Streamable-HTTP transport to a user-hosted SANS SIFT Workstation
+  (`SIFT_MCP_URL`) is an opt-in path verified only against a local mock
+  serving the same contract; no accuracy figure here was produced against
+  an external VM, and the remote-only discovered-tool path shifts evidence
+  verification to that VM (see [`architecture.md`](architecture.md)).
 - `mcpFetcher`'s three SSRF layers executed cleanly against all
   enrichment requests in the recorded runs. Note a scope distinction:
   the committed recordings predate the `fetch_url` hardening and show the

@@ -121,7 +121,7 @@ export async function* runInvestigation(
     iterationLimit: maxIterations,
   };
 
-  const tools = buildOpenAiTools();
+  const { tools, remoteToolNames } = await buildOpenAiTools();
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     {
@@ -252,6 +252,7 @@ export async function* runInvestigation(
       try {
         dispatch = await dispatchToolCall(tc.function.name, argsRaw, {
           caseId,
+          remoteToolNames,
         });
       } catch (err) {
         // ArtifactIntegrityError is a non-recoverable spoliation signal: the
